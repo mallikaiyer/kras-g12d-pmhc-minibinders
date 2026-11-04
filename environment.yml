@@ -1,0 +1,54 @@
+# Conda environment for Challenge 5 (KRAS G12D pMHC binder design).
+#
+# Create with:   mamba env create -f environment.yml
+# Activate with: conda activate kras-pmhc
+#
+# Exact solved versions are recorded in environment.lock.yml after creation.
+# Treat this file as the human-authored intent and the lock file as the record.
+
+name: kras-pmhc
+
+channels:
+  - conda-forge
+
+dependencies:
+  # --- interpreter -------------------------------------------------------
+  - python=3.11
+
+  # --- core scientific stack --------------------------------------------
+  - numpy
+  - pandas
+  - scipy
+
+  # --- structural biology ------------------------------------------------
+  # biotite: mmCIF/PDB I/O, dihedrals, SASA (Shrake-Rupley), superposition,
+  # neighbour searching. Replaces biopython throughout this project.
+  - biotite
+
+  # --- structure preparation and molecular dynamics ----------------------
+  # protonation/repair, restrained minimisation, short MD.
+  - openmm
+  - pdbfixer
+
+  # --- sequence design ---------------------------------------------------
+  # ProteinMPNN is a cloned repo rather than a package; it needs torch.
+  # CPU/MPS build is sufficient (~1.7M parameters, seconds per design).
+  - pytorch
+
+  # --- development -------------------------------------------------------
+  - pytest
+  - ruff
+
+  - pip
+  - pip:
+      # PRODIGY: contact-based binding-affinity prediction (Route A step 8).
+      # Xue et al., Bioinformatics 2016, doi:10.1093/bioinformatics/btw514
+      - prodigy-prot
+
+# ---------------------------------------------------------------------------
+# Deliberately NOT included, with the reason:
+#
+#   foldseek       - novelty self-check. Install via homebrew rather than
+#   mmseqs2          bioconda on Apple silicon; both have arm64 bottles.
+#   boltz / chai   - run on free Colab GPU, not locally.
+# ---------------------------------------------------------------------------
