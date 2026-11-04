@@ -1,0 +1,33 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Fetched external data. Regenerate with `make fetch` (scripts/00_fetch_structures.py).
+# Provenance is tracked in data/external/MANIFEST.tsv, which IS committed.
+data/external/pdb/*
+!data/external/pdb/.gitkeep
+data/external/papers/*
+!data/external/papers/.gitkeep
+
+# Local working artifacts: binary, not auditable, not for publication.
+work/
+
+# Personal notebook: working notes, not part of the published record.
+docs/notes.md
+
+# Large generated outputs. Small summary tables under results/ are committed.
+*.dcd
+*.xtc
+*.trr
+*.npz
+*.pse
+results/**/backbones/
+results/**/designs/
+results/**/trajectories/
