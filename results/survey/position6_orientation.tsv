@@ -1,0 +1,13 @@
+pdb_id	peptide_chain	heavy_chain	res_name	tcr_present	cb_source	ca_to_ref	cb_to_ref	cb_minus_ca	points	sidechain_sasa_pmhc_only	reference	note
+7OW3	C	A	GLY	False	reconstructed	10.94	11.87	0.93	out of groove		ARG114:CZ (chain A)	
+7OW3	F	D										position 6 not modelled
+7OW3	I	G										position 6 not modelled
+7OW3	L	J	GLY	False	reconstructed	10.51	11.39	0.88	out of groove		ARG114:CZ (chain J)	
+7OW4	C	A										position 6 not modelled
+7OW4	F	D										position 6 not modelled
+7OW4	I	G										position 6 not modelled
+7OW4	L	J										position 6 not modelled
+7OW5	C	A	GLY	True	reconstructed	7.41	6.45	-0.96	into groove		ARG114:CZ (chain A)	
+7OW6	C	A	ASP	True	observed	6.42	5.72	-0.7	into groove	7.38	ARG114:CZ (chain A)	
+7PB2	C	A	ASP	True	observed	6.5	5.6	-0.9	into groove	6.03	ARG114:CZ (chain A)	
+7PB2	H	F	ASP	True	observed	6.34	5.65	-0.69	into groove	4.14	ARG114:CZ (chain F)	

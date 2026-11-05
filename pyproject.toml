@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kras-pmhc"
+version = "0.1.0"
+description = "De novo binder design against KRAS G12D presented on HLA-A*11:01 (Anthropic x Adaptyv 2026, Challenge 5)"
+requires-python = ">=3.11"
+# Runtime dependencies are provisioned by environment.yml / environment.lock.yml.
+# They are listed here for completeness, not pinned, so that `pip install -e .`
+# into the conda env does not try to resolve or replace conda-installed builds.
+dependencies = [
+    "biotite",
+    "numpy",
+    "pandas",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Tests that need downloaded structures are marked, so the suite still runs
+# (with skips) on a fresh clone before `make fetch`.
+markers = ["needs_data: requires structures fetched into data/external/pdb"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

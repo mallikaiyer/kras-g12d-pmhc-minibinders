@@ -1,0 +1,85 @@
+pdb_id	peptide_chain	res_id	res_name	phi_deg	psi_deg	note
+7OW3	C	3	VAL	-58.7	135.9	
+7OW3	C	4	GLY	-53.3	172.1	
+7OW3	C	5	ALA	-57.9	-53.6	
+7OW3	C	6	GLY	-69.6	48.3	
+7OW3	C	7	GLY	-63.5	167.1	
+7OW3	C	8	VAL	-119.8	132.7	
+7OW3	C	9	GLY	-50.2	156.2	
+7OW3	F	3	VAL	-79.5	155.0	
+7OW3	F	4	GLY	-71.9		chain break or terminus
+7OW3	F	5				not modelled
+7OW3	F	6				not modelled
+7OW3	F	7				not modelled
+7OW3	F	8	VAL		117.4	chain break or terminus
+7OW3	F	9	GLY	-60.0	144.6	
+7OW3	I	3	VAL	-90.5		chain break or terminus
+7OW3	I	4				not modelled
+7OW3	I	5				not modelled
+7OW3	I	6				not modelled
+7OW3	I	7				not modelled
+7OW3	I	8	VAL		135.1	chain break or terminus
+7OW3	I	9	GLY	-68.5	171.9	
+7OW3	L	3	VAL	-56.7	129.2	
+7OW3	L	4	GLY	-59.5	115.5	
+7OW3	L	5	ALA	-90.6	61.6	
+7OW3	L	6	GLY	-86.4	41.7	
+7OW3	L	7	GLY	-62.4	122.6	
+7OW3	L	8	VAL	-64.5	130.6	
+7OW3	L	9	GLY	-54.4	143.9	
+7OW4	C	3	VAL	-62.1	148.8	
+7OW4	C	4	GLY	-60.2		chain break or terminus
+7OW4	C	5				not modelled
+7OW4	C	6				not modelled
+7OW4	C	7	GLY		131.1	chain break or terminus
+7OW4	C	8	VAL	-95.0	122.0	
+7OW4	C	9	GLY	-53.1	145.8	
+7OW4	F	3	VAL	-62.6	148.0	
+7OW4	F	4	GLY	-73.2		chain break or terminus
+7OW4	F	5				not modelled
+7OW4	F	6				not modelled
+7OW4	F	7	GLY		132.0	chain break or terminus
+7OW4	F	8	VAL	-95.0	133.4	
+7OW4	F	9	GLY	-50.3	146.6	
+7OW4	I	3	VAL	-57.4	150.9	
+7OW4	I	4	GLY	-63.8		chain break or terminus
+7OW4	I	5				not modelled
+7OW4	I	6				not modelled
+7OW4	I	7	GLY		173.5	chain break or terminus
+7OW4	I	8	VAL	-89.0	152.1	
+7OW4	I	9	GLY	-63.7	145.0	
+7OW4	L	3	VAL	-62.7	152.1	
+7OW4	L	4	GLY	-40.1		chain break or terminus
+7OW4	L	5				not modelled
+7OW4	L	6				not modelled
+7OW4	L	7	GLY		143.1	chain break or terminus
+7OW4	L	8	VAL	-81.0	138.2	
+7OW4	L	9	GLY	-59.3	139.8	
+7OW5	C	3	VAL	-64.2	153.1	
+7OW5	C	4	GLY	-66.2	149.5	
+7OW5	C	5	ALA	-59.8	135.1	
+7OW5	C	6	GLY	-53.6	139.7	
+7OW5	C	7	GLY	-69.5	-27.0	
+7OW5	C	8	VAL	-132.3	148.7	
+7OW5	C	9	GLY	-78.3	-167.2	
+7OW6	C	3	VAL	-50.4	154.9	
+7OW6	C	4	GLY	-63.4	154.5	
+7OW6	C	5	ALA	-63.7	142.4	
+7OW6	C	6	ASP	-37.2	117.7	
+7OW6	C	7	GLY	-68.3	-24.0	
+7OW6	C	8	VAL	-142.4	128.8	
+7OW6	C	9	GLY	-74.7	-174.2	
+7PB2	C	3	VAL	-75.1	140.7	
+7PB2	C	4	GLY	-51.6	145.3	
+7PB2	C	5	ALA	-54.3	133.2	
+7PB2	C	6	ASP	-48.0	125.4	
+7PB2	C	7	GLY	-53.8	-76.3	
+7PB2	C	8	VAL	-90.9	127.4	
+7PB2	C	9	GLY	-83.2	173.1	
+7PB2	H	3	VAL	-83.6	152.4	
+7PB2	H	4	GLY	-61.2	147.8	
+7PB2	H	5	ALA	-58.5	134.1	
+7PB2	H	6	ASP	-39.2	116.3	
+7PB2	H	7	GLY	-49.5	-68.2	
+7PB2	H	8	VAL	-99.8	135.2	
+7PB2	H	9	GLY	-88.6	166.5	
