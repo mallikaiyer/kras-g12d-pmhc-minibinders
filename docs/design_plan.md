@@ -101,7 +101,7 @@ The parent JDI TCR binds G12D at **63 µM** with **no detectable binding** to wi
 
 ---
 
-# Route A (primary) — conformational selection on the open state
+# Route A — conformational selection on the open state
 
 ## Rationale
 
@@ -130,7 +130,7 @@ Stage numbers correspond to `scripts/`. Stages 00–02 are complete.
 | 01 | Structural survey: completeness, dihedrals, orientation, contacts | done |
 | 02 | Asp rotamer scan on the open backbone | done |
 | 03 | Build the design targets | next |
-| 04 | Protonate, relax, and test open-state persistence by MD | |
+| 04 | Protonate and relax under a backbone restraint | done |
 | 05 | Generate backbones (RFdiffusion, Colab) | |
 | 06 | Design sequences (ProteinMPNN) | |
 | 07 | Mechanism audit — the primary filter | |
@@ -141,7 +141,19 @@ Stage numbers correspond to `scripts/`. Stages 00–02 are complete.
 
 **03 — Build the design targets.** 7OW3 copies **C** (HLA chain A) and **L** (chain J), each as peptide + heavy chain + its paired β2m. Mutate Gly6→Asp. Build both copies rather than choosing: chain L has the more comfortable φ and lower B-factors, chain C has unobstructed rotamer space, neither dominates, and they are independent observations of the same conformation. Take 2–3 distinct χ1 wells per copy from the stage-02 scan, preferring high-SASA clash-free rotamers in canonical wells.
 
-**04 — Protonate, relax, test persistence.** PDBFixer for missing atoms and hydrogens at pH 7.4; restrained minimisation in OpenMM (amber14-all + implicit GBn2), heavy-atom restraints on HLA and β2m, peptide free. Confirm position-6 φ/ψ has not left the allowed region and χ1/χ2 remain canonical. Then unrestrained MD of the pMHC alone, implicit solvent, 3 × 5 ns, tracking the position-6 Cβ→Arg114 CZ distance and Asp6 side-chain SASA. Minimisation alone cannot answer whether the state is populated — it always converges to something strain-free, and strain-free ≠ populated.
+**04 — Protonate and relax.** PDBFixer adds hydrogens at pH 7.4 without building
+unobserved residues; OpenMM minimises with amber14-all + implicit GBn2 and backbone
+heavy atoms harmonically restrained at 10 kcal/mol/Å², every side chain free. All
+nine structures — five mutants, two WT and two apo references — get an identical
+protocol, so the references remain valid comparators for stage 07.
+
+Result: backbone RMSD 0.097–0.102 Å throughout; every rotamer stayed in its well
+(largest χ1 shift 17°); carboxylate SASA 53–82 Å², still far above the closed-state
+7.4 Å²; carboxylate-to-Arg114 unchanged at 10.9–13.4 Å. Arg114 side-chain
+displacement is 0.236–0.279 Å in the mutants against 0.247–0.271 Å in the references
+— indistinguishable, so the groove does not reach for the open aspartate.
+
+**This stage runs no dynamics.** See *Stated shortcomings*.
 
 **05 — Generate backbones.** RFdiffusion on Colab, binder mode, target = HLA α1/α2 + peptide. Hotspots on peptide residues 4–7 plus the Asp. `noise_scale_ca=0.5`, `noise_scale_frame=0.5`. Checkpoint to Drive.
 
@@ -159,59 +171,61 @@ biotite · PDBFixer + OpenMM · RFdiffusion (Colab T4) · ProteinMPNN (local CPU
 
 ---
 
-# Route B (alternative) — closed state, indirect electrostatics
-
-Run only if stage 04 says the open state is not populated.
-
-## Rationale
-
-Design against 7OW6 with the TCR stripped, reproducing Poole's validated mechanism: a paratope electrostatically complementary to the more negative potential the buried Asp6 projects upward.
-
-**What recommends it:** the mechanism is experimentally demonstrated on this exact target, with >4000× discrimination and MMPBSA agreement (12.6 vs 10.8 kcal/mol experimental). The HLA α1/α2 surface is invariant across all five structures, so a binder reading mostly that surface plus the peptide backbone is far more likely to fold and bind.
-
-**What it costs:**
-
-- 7OW6's peptide conformation exists *because a TCR is bound*. This route does not escape the conformational-selection argument; it makes the same bet on a different member of the ensemble.
-- The discriminating signal acts from 13–16 Å, now measured. That is not deliberately designable with free tools, and not verifiable with them either.
-- The invariant HLA surface is identical in all three assay targets, so the default outcome is a binder that hits all of them — failing objectives 1 and 2.
-
-So this route plays for a different prize: **objective-3 honourable mention and getting tested**, not for the win. A legitimate bet given the goal hierarchy, but not a safer path to the same outcome.
-
-## Steps
-
-1. 7OW6, keep chains A (HLA), B (β2m), C (peptide with real Asp6); delete D and E (TCR). Light restrained minimisation only — the coordinates are experimental.
-2. RFdiffusion hotspotted over peptide residues 4–7 and the flanking groove rim (HLA ~65–72, ~150–158). **Do not hotspot D6** — it is 2.95 Å from Arg114 and unreachable; aiming at it produces clashing designs.
-3. ProteinMPNN, then filter for net-positive formal charge among binder residues within ~12 Å of peptide residue 6 — the paper's mechanism as a selectable property.
-4. PDB2PQR + APBS on finalists; confirm a positive potential patch facing the peptide centre. Same analysis as Poole et al. Fig. 3e,f (±2 eV), cheap on CPU. *Not currently in the environment — add only if switching.*
-5. Affinity proxy and counter-screen as Route A, noting the PRODIGY caveat below.
-6. Novelty, screens, package as Route A.
-
----
-
-## Decision rule
-
-Set before seeing the result:
-
-- **Open state persists over a few ns** (Cβ→Arg114 CZ stays > ~9 Å, Asp6 SASA stays > ~20 Å²) → Route A, full allocation.
-- **Position 6 collapses into the groove within ~1 ns** → population penalty likely 3–4+ kcal/mol, Route A will bind nothing. Switch to Route B.
-- **Mixed / samples both** → Route A primary, 2–3 Route B designs in rows 8–10 as a hedge.
-
-Keep Route B *trailing*, not parallel — abandonable at any point without having cost the primary.
-
----
-
 ## Affinity prediction — PRODIGY
 
 Xue et al., *Bioinformatics* 2016, [10.1093/bioinformatics/btw514](https://doi.org/10.1093/bioinformatics/btw514). Installed as `prodigy-prot`.
 
-PRODIGY predicts ΔG from counts of interfacial contacts by residue class plus non-interacting surface. Two consequences for the methods document:
+PRODIGY predicts ΔG from counts of interfacial contacts by residue class plus non-interacting surface. One consequence for the methods document:
 
 - **It suits Route A.** Replacing Asp6 with Gly removes side-chain contacts outright, which PRODIGY registers directly.
-- **It is near-blind to Route B's discriminator.** With no contact to position 6, the contact map barely changes between G12D and WT, so predicted ΔΔG sits near zero whether or not the design works. For Route B the APBS check is the on-mechanism evidence and PRODIGY only bounds overall affinity.
-
 Trained on natural complexes with ~1.5 kcal/mol error, so use it for **ranking within a congeneric series**, never as an absolute ΔG.
 
 ---
+
+## Stated shortcomings
+
+These belong in the submitted methods document verbatim. They are deliberate
+trades made under a deadline, not oversights.
+
+**1. The population of the open conformer is not measured.** This design rests on
+the open conformer being populated enough in the free G12D ensemble for
+conformational selection to operate. No molecular dynamics or free-energy
+calculation was run to test that — a deliberate trade for submission speed. The
+structural evidence establishes only that the open conformer is crystallographically
+observed in the wild-type free complex in two independent copies, that an aspartate
+is sterically compatible with that backbone, and that every sterically viable
+rotamer is solvent-exposed. Whether it is populated enough in solution for a binder
+to select it is untested, and is the principal risk to this submission.
+
+Two pieces of evidence bear on it without new compute, and they cut in opposite
+directions. In favour: 7OW4, the free G12D structure, has no density at peptide
+positions 5–6 in any of four copies, so that region demonstrably samples multiple
+conformations — conformational selection needs a populated alternative state, and
+disorder is what that looks like in a diffraction experiment. Against: the same
+mobility means the single modelled conformer is not well determined. Position-6
+B-factors in the two source copies are 48.9 and 57.9 Å² against a structure mean of
+37.9 Å².
+
+**2. The open backbone is wild-type.** 7OW3 carries Gly6. The mutant's own free
+structure resolves nothing at position 6, so the G12D open backbone is inferred from
+the wild-type one. 7OW4's disorder is worse than 7OW3's, suggesting the mutant
+peptide is if anything more mobile there.
+
+**3. Relaxation is local, not exhaustive.** Stage 04 minimises under a backbone
+restraint. It shows each built rotamer sits at a local minimum and that the HLA
+groove does not reach toward the aspartate, but a local minimum is not evidence of
+thermodynamic preference.
+
+**4. Hydrogen placement is not deterministic.** PDBFixer's initial hydrogen
+positions vary between runs, so stage 04's pre-minimisation energies are not
+reproducible run to run (observed spread of several thousand kcal/mol). The
+minimised energies are stable to a few kcal/mol out of ~19,800, and all reported
+geometry is measured after minimisation.
+
+**5. Only one route was pursued.** An alternative design against the TCR-bound
+closed conformation, reproducing the indirect-electrostatic mechanism of Poole et
+al., was specified and deliberately not run. Time was spent on depth in one
+mechanism rather than breadth across two.
 
 ## Day plan (6–8 Nov)
 

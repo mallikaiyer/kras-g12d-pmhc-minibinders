@@ -7,7 +7,7 @@
 PYTHON ?= python
 SCRIPTS := scripts
 
-.PHONY: help install fetch survey test lint clean
+.PHONY: help install fetch survey rotamers targets relax test lint clean
 
 help:
 	@echo "Setup"
@@ -16,6 +16,9 @@ help:
 	@echo ""
 	@echo "Analysis"
 	@echo "  make survey    structural survey -> results/survey/"
+	@echo "  make rotamers  Asp rotamer scan -> results/rotamer_scan/"
+	@echo "  make targets   build design targets -> data/targets/"
+	@echo "  make relax     protonate + minimise targets -> data/targets_relaxed/"
 	@echo ""
 	@echo "Quality"
 	@echo "  make test      run the test suite"
@@ -30,6 +33,15 @@ fetch:
 
 survey:
 	$(PYTHON) $(SCRIPTS)/01_structure_survey.py
+
+rotamers:
+	$(PYTHON) $(SCRIPTS)/02_asp_rotamer_scan.py
+
+targets:
+	$(PYTHON) $(SCRIPTS)/03_build_targets.py
+
+relax:
+	$(PYTHON) $(SCRIPTS)/04_relax_targets.py
 
 test:
 	$(PYTHON) -m pytest
