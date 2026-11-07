@@ -109,13 +109,7 @@ def main() -> int:
         # One copy of the complex only: peptide, its heavy chain, and the
         # beta-2-microglobulin paired with it. Neighbouring copies in the
         # asymmetric unit are crystal packing, not biology.
-        b2m = [
-            c_id
-            for c_id, n_res in structures.chain_residue_counts(array).items()
-            if 85 <= n_res <= 125
-        ]
-        context_chains = [pep, heavy] + b2m[:1]
-        context = array[np.isin(array.chain_id, context_chains)]
+        context = structures.extract_complex(array, pep)
         # Everything except position 6 itself, for clash detection.
         others = context[
             ~((context.chain_id == pep) & (context.res_id == MUTANT_POSITION))

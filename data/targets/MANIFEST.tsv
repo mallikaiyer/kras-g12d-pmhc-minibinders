@@ -1,0 +1,6 @@
+target_id	source	source_peptide_chain	source_heavy_chain	source_b2m_chain	chi1	chi2	phi	psi	carboxylate_sasa	sidechain_sasa	carboxylate_to_ref	closest_heavy_atom	reference	n_atoms_full	n_atoms_crop	heavy_gaps_in_crop	full_pdb	crop_pdb
+7ow3_C_G6D_chi1m70_chi2p120	7OW3	C	A	B	-70.0	120.0	-69.6	48.3	84.87	105.83	13.3	3.71	ARG114:CZ	3140	1532	1	7ow3_C_G6D_chi1m70_chi2p120.pdb	7ow3_C_G6D_chi1m70_chi2p120_crop.pdb
+7ow3_C_G6D_chi1m180_chi2p30	7OW3	C	A	B	-180.0	30.0	-69.6	48.3	58.36	91.08	12.29	3.48	ARG114:CZ	3140	1532	1	7ow3_C_G6D_chi1m180_chi2p30.pdb	7ow3_C_G6D_chi1m180_chi2p30_crop.pdb
+7ow3_C_G6D_chi1p60_chi2p45	7OW3	C	A	B	60.0	45.0	-69.6	48.3	48.59	82.39	10.41	3.71	ARG114:CZ	3140	1532	1	7ow3_C_G6D_chi1p60_chi2p45.pdb	7ow3_C_G6D_chi1p60_chi2p45_crop.pdb
+7ow3_L_G6D_chi1m70_chi2p120	7OW3	L	J	K	-70.0	120.0	-86.4	41.7	82.49	92.9	12.72	3.69	ARG114:CZ	3144	1536		7ow3_L_G6D_chi1m70_chi2p120.pdb	7ow3_L_G6D_chi1m70_chi2p120_crop.pdb
+7ow3_L_G6D_chi1m180_chi2p0	7OW3	L	J	K	-180.0	0.0	-86.4	41.7	67.54	88.49	11.95	3.57	ARG114:CZ	3144	1536		7ow3_L_G6D_chi1m180_chi2p0.pdb	7ow3_L_G6D_chi1m180_chi2p0_crop.pdb

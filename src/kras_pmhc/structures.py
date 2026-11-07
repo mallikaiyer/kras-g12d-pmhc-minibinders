@@ -32,6 +32,16 @@ MIN_HEAVY_CHAIN_RESIDUES = 250
 #: A peptide and its presenting groove are in van der Waals contact.
 PEPTIDE_CONTACT_CUTOFF = 5.0
 
+#: Atom-pair separation counted as a contact when assigning beta-2-microglobulin
+#: to a heavy chain.
+B2M_CONTACT_CUTOFF = 5.0
+
+#: Required ratio between the best and second-best beta-2-microglobulin
+#: candidate. A biological interface beats a lattice contact by roughly 10x in
+#: 7OW3 (808-861 contacts versus at most 84), so 3x is a conservative floor
+#: that still refuses a genuinely ambiguous assembly.
+B2M_CONTACT_MARGIN = 3.0
+
 
 def load(pdb_id: str, pdb_dir: Path | None = None) -> AtomArray:
     """Read one structure as an ``AtomArray`` of protein atoms, model 1.
@@ -134,6 +144,81 @@ def pair_peptides_with_heavy_chains(array: AtomArray) -> dict[str, str]:
     return pairs
 
 
+def b2m_chains(array: AtomArray) -> list[str]:
+    """Chain IDs of beta-2-microglobulin copies, by residue count."""
+    counts = chain_residue_counts(array)
+    low, high = B2M_RESIDUE_RANGE
+    return [c for c, n in counts.items() if low <= n <= high]
+
+
+def pair_b2m_with_heavy_chains(array: AtomArray) -> dict[str, str]:
+    """Map each class I heavy chain to its beta-2-microglobulin.
+
+    Closest approach cannot be used for this. In a multi-copy asymmetric unit,
+    crystal packing places several beta-2-microglobulin copies within van der
+    Waals distance of the same heavy chain - in 7OW3, chains B, E and K all sit
+    within 3.3 A of heavy chain J. What distinguishes the biological partner is
+    the *size* of the interface, not its closest point: the heterodimer buries
+    an order of magnitude more contacts than a lattice contact.
+
+    Raises:
+        ValueError: if no candidate wins by a clear margin, or if two heavy
+            chains claim the same partner. Either means an assembly this code
+            has not seen, and a guess there would silently produce a chimeric
+            complex built from two different copies.
+    """
+    candidates = b2m_chains(array)
+    heavies = heavy_chains(array)
+    if not candidates:
+        raise ValueError("no beta-2-microglobulin chain found")
+
+    pairs: dict[str, str] = {}
+    for heavy in heavies:
+        heavy_coords = array.coord[array.chain_id == heavy]
+        counts = []
+        for b2m in candidates:
+            b2m_coords = array.coord[array.chain_id == b2m]
+            separation = np.linalg.norm(
+                heavy_coords[:, None, :] - b2m_coords[None, :, :], axis=-1
+            )
+            counts.append(int((separation < B2M_CONTACT_CUTOFF).sum()))
+
+        order = np.argsort(counts)[::-1]
+        best, runner_up = counts[order[0]], (counts[order[1]] if len(order) > 1 else 0)
+        if best == 0:
+            raise ValueError(f"heavy chain {heavy} contacts no beta-2-microglobulin")
+        if runner_up > 0 and best < B2M_CONTACT_MARGIN * runner_up:
+            raise ValueError(
+                f"heavy chain {heavy}: beta-2-microglobulin assignment is ambiguous "
+                f"({candidates[order[0]]}={best} vs {candidates[order[1]]}={runner_up} "
+                f"contacts, need a {B2M_CONTACT_MARGIN}x margin)"
+            )
+        pairs[heavy] = candidates[order[0]]
+
+    claimed = list(pairs.values())
+    if len(set(claimed)) != len(claimed):
+        raise ValueError(f"beta-2-microglobulin claimed by more than one heavy chain: {pairs}")
+    return pairs
+
+
+def extract_complex(array: AtomArray, peptide_chain: str) -> AtomArray:
+    """One biological pMHC: a peptide, its heavy chain and its beta-2-microglobulin.
+
+    Neighbouring copies in the asymmetric unit are crystal packing, not biology,
+    so anything that simulates or scores a complex must work from this rather
+    than from the deposited file as a whole.
+    """
+    peptide_to_heavy = pair_peptides_with_heavy_chains(array)
+    if peptide_chain not in peptide_to_heavy:
+        raise ValueError(
+            f"chain {peptide_chain} is not a peptide chain "
+            f"(found {sorted(peptide_to_heavy)})"
+        )
+    heavy = peptide_to_heavy[peptide_chain]
+    b2m = pair_b2m_with_heavy_chains(array)[heavy]
+    return array[np.isin(array.chain_id, [peptide_chain, heavy, b2m])]
+
+
 def residue(array: AtomArray, chain_id: str, res_id: int) -> AtomArray:
     """All atoms of one residue. Empty if the residue is not modelled."""
     return array[(array.chain_id == chain_id) & (array.res_id == res_id)]
@@ -154,6 +239,28 @@ def atom_coord(
     if len(hit) == 0:
         return None
     return np.asarray(hit[0], dtype=float)
+
+
+def select_atoms(
+    array: AtomArray, chain_id: str, res_id: int, names: list[str] | tuple[str, ...]
+) -> np.ndarray:
+    """Coordinates of named atoms within one residue, shape ``(n, 3)``.
+
+    Raises:
+        ValueError: if none of the named atoms are present, rather than
+            returning an empty array that a distance calculation would then
+            silently mishandle.
+    """
+    mask = (
+        (array.chain_id == chain_id)
+        & (array.res_id == res_id)
+        & np.isin(array.atom_name, list(names))
+    )
+    if not mask.any():
+        raise ValueError(
+            f"chain {chain_id} residue {res_id} has none of the atoms {tuple(names)}"
+        )
+    return array.coord[mask]
 
 
 def observed_sequence(array: AtomArray, chain_id: str, length: int) -> str:

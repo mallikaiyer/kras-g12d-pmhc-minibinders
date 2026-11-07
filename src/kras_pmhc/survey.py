@@ -45,7 +45,7 @@ MAX_PEPTIDE_BOND = 2.0
 _BACKBONE = {"N", "CA", "C", "O", "OXT"}
 
 
-def _phi_psi(
+def phi_psi(
     array: AtomArray, chain_id: str, res_id: int
 ) -> tuple[float | None, float | None]:
     """Backbone phi/psi in degrees, or ``None`` where undefined.
@@ -128,7 +128,7 @@ def peptide_dihedrals(
                     }
                 )
                 continue
-            phi, psi = _phi_psi(array, pep, res_id)
+            phi, psi = phi_psi(array, pep, res_id)
             rows.append(
                 {
                     "pdb_id": pdb_id.upper(),
@@ -222,14 +222,11 @@ def position6_orientation(array: AtomArray, pdb_id: str) -> list[dict]:
         cb_to_ref = float(np.linalg.norm(cb - ref))
 
         # SASA in the pMHC context only, so that free and receptor-bound
-        # entries are compared on the same basis.
-        context = [pep, heavy]
-        b2m = [
-            c_id
-            for c_id, n_res in structures.chain_residue_counts(array).items()
-            if 85 <= n_res <= 125
-        ]
-        context += b2m[:1]
+        # entries are compared on the same basis. The beta-2-microglobulin must
+        # be the one belonging to *this* copy; in a multi-copy asymmetric unit
+        # several sit within contact distance of the same heavy chain.
+        b2m = structures.pair_b2m_with_heavy_chains(array)[heavy]
+        context = [pep, heavy, b2m]
 
         rows.append(
             {

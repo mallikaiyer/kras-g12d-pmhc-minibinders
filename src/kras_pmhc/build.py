@@ -11,6 +11,9 @@ arithmetic PyMOL's mutagenesis wizard and every rotamer library use.
 from __future__ import annotations
 
 import numpy as np
+from biotite.structure import AtomArray
+
+from .geometry import virtual_cb
 
 # Ideal internal coordinates for an aspartate side chain, from standard
 # residue topology (CHARMM/AMBER agree to within a few hundredths of an
@@ -100,3 +103,79 @@ def build_asp_sidechain(
     # i.e. 180 degrees further round the CB-CG bond.
     od2 = place_atom(ca, cb, cg, CG_OD, ANGLE_CB_CG_OD, chi2 + 180.0)
     return {"CG": cg, "OD1": od1, "OD2": od2}
+
+
+#: Atoms added when turning a glycine into an aspartate, in the order a PDB
+#: file conventionally lists them.
+ASP_ADDED_ATOMS = ("CB", "CG", "OD1", "OD2")
+
+
+def mutate_gly_to_asp(
+    array: AtomArray,
+    chain_id: str,
+    res_id: int,
+    chi1: float,
+    chi2: float,
+) -> AtomArray:
+    """Replace a glycine with an aspartate at a chosen rotamer.
+
+    The backbone is passed through untouched: Cbeta is reconstructed from the
+    existing N-CA-C frame, so the mutation adds four atoms and relabels the
+    residue without moving anything that was observed experimentally. That
+    matters because the whole argument for this target is that the backbone is
+    an experimental observation rather than a model.
+
+    Args:
+        array: structure containing the glycine. Not modified.
+        chain_id, res_id: which residue to mutate.
+        chi1: N-CA-CB-CG torsion in degrees.
+        chi2: CA-CB-CG-OD1 torsion in degrees.
+
+    Returns:
+        A new array with CB, CG, OD1 and OD2 inserted directly after the
+        residue's existing atoms, so that output files stay grouped by residue.
+
+    Raises:
+        ValueError: if the residue is absent, is not a glycine, or lacks a
+            complete backbone.
+    """
+    mask = (array.chain_id == chain_id) & (array.res_id == res_id)
+    target = array[mask]
+    if len(target) == 0:
+        raise ValueError(f"chain {chain_id} residue {res_id} is not modelled")
+    observed = str(target.res_name[0])
+    if observed != "GLY":
+        raise ValueError(
+            f"chain {chain_id} residue {res_id} is {observed}, expected GLY"
+        )
+
+    coords = {}
+    for name in ("N", "CA", "C"):
+        hit = target.coord[target.atom_name == name]
+        if len(hit) == 0:
+            raise ValueError(f"chain {chain_id} residue {res_id} has no {name} atom")
+        coords[name] = np.asarray(hit[0], dtype=float)
+
+    cb = virtual_cb(coords["N"], coords["CA"], coords["C"])
+    built = {"CB": cb, **build_asp_sidechain(coords["N"], coords["CA"], cb, chi1, chi2)}
+
+    work = array.copy()
+    work.res_name[mask] = "ASP"
+
+    # Duplicating an existing atom guarantees the new atoms carry exactly the
+    # same annotation categories as the rest of the array, including optional
+    # ones such as b_factor and occupancy. Building a bare AtomArray instead
+    # would drop them and make concatenation fail.
+    indices = np.where(mask)[0]
+    extra = work[np.repeat(indices[0], len(ASP_ADDED_ATOMS))]
+    for i, name in enumerate(ASP_ADDED_ATOMS):
+        extra.coord[i] = built[name]
+        extra.atom_name[i] = name
+        extra.element[i] = name[0]
+    if "b_factor" in extra.get_annotation_categories():
+        # Built atoms inherit the local disorder of the residue they extend,
+        # which is more honest than claiming a B-factor of zero.
+        extra.b_factor[:] = float(np.mean(target.b_factor))
+
+    insert_at = int(indices[-1]) + 1
+    return work[:insert_at] + extra + work[insert_at:]
