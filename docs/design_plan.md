@@ -129,9 +129,9 @@ Stage numbers correspond to `scripts/`. Stages 00–02 are complete.
 | 00 | Fetch the five PDB entries; record a SHA-256 manifest | done |
 | 01 | Structural survey: completeness, dihedrals, orientation, contacts | done |
 | 02 | Asp rotamer scan on the open backbone | done |
-| 03 | Build the design targets | next |
+| 03 | Build the design targets | done |
 | 04 | Protonate and relax under a backbone restraint | done |
-| 05 | Generate backbones (RFdiffusion, Colab) | |
+| 05 | Generate backbones (RFdiffusion, Colab) | ready to run |
 | 06 | Design sequences (ProteinMPNN) | |
 | 07 | Mechanism audit — the primary filter | |
 | 08 | Affinity proxy (PRODIGY) | |
@@ -155,11 +155,57 @@ displacement is 0.236–0.279 Å in the mutants against 0.247–0.271 Å in the 
 
 **This stage runs no dynamics.** See *Stated shortcomings*.
 
-**05 — Generate backbones.** RFdiffusion on Colab, binder mode, target = HLA α1/α2 + peptide. Hotspots on peptide residues 4–7 plus the Asp. `noise_scale_ca=0.5`, `noise_scale_frame=0.5`. Checkpoint to Drive.
+**05 — Generate backbones.** RFdiffusion binder mode against
+`7ow3_L_G6D_chi1m70_chi2p120_relaxed_crop.pdb` (chain A = HLA α1/α2 residues 1–180,
+chain C = peptide 1–10). Parameters, all set explicitly rather than inferred:
+
+| Parameter | Value | Source |
+|---|---|---|
+| `contigmap.contigs` | `[A1-180/0 C1-10/0 60-75]` | target + 60–75 aa binder |
+| `ppi.hotspot_res` | `[C5,C6,C7]` | centred on the mutation; within the recommended 3–6 |
+| `denoiser.noise_scale_ca` / `_frame` | `0.5` / `0.5` | RFdiffusion README for PPI |
+| `diffuser.T` | `50` | upstream default |
+| `inference.ckpt_override_path` | `Complex_base_ckpt.pt` | |
+
+C5/C6/C7 are Ala/**Asp**/Gly, so Asp6 is the only side chain of substance in the
+hotspot set and the local surface is flat — which is why a pilot runs first.
+
+*Execution.* Colab (free T4) via `notebooks/05_rfdiffusion_binder.ipynb`, with the
+target staged through the mounted Google Drive by `scripts/05a_stage_to_drive.py` and
+its SHA-256 re-checked in the notebook. Generation runs in batches of 8, each
+checkpointed to Drive, so a preempted session resumes rather than restarts.
+`scripts/05_ingest_backbones.py` reads the results back and scores them. Manual steps
+are recorded in `docs/colab_runbook.md`.
+
+*Why not an API.* The NVIDIA NIM RFdiffusion endpoint
+(`POST /biology/ipd/rfdiffusion/generate`) would be scriptable from the laptop with
+seeded, reproducible calls, but it exposes no noise-scale field — so the 0.5 the
+RFdiffusion authors recommend for protein–protein interfaces cannot be set — and
+multi-chain targets are undocumented in its reference. Kept as the contingency if
+free Colab will not allocate a GPU, in which case the loss of noise control is
+recorded as a deviation.
+
+*Pilot gate.* Applied locally to the first 8 backbones. A backbone passes when **Asp6
+is an interface residue** (support, rim or core) **and the peptide carries ≥20% of the
+target-side interface area**. Production proceeds only if **≥4 of 8** pass. Fewer
+means the binder is landing on the α1/α2 helix tops — the predicted failure mode,
+since those are a far larger hydrophobic surface than a ten-residue peptide in a
+groove. Remedies, one pilot each: widen hotspots to `[C4,C5,C6,C7,C8]`; then the
+`Complex_beta` checkpoint for less helical topologies.
+
+Hard validation, separate from the gate because these are bugs rather than design
+failures: target backbone RMSD < 0.1 Å measured **without superposition** (RFdiffusion
+holds the target fixed, so anything else means a misparse or a wrong contig), binder
+length within 60–75, no binder-to-target approach below 2.0 Å, and no one-sided
+interface. That last check earns its place — occlusion is mutual, so an interface
+appearing on only one side means the generated chain is interpenetrating the target
+rather than docked against it. A clash test against the Asp6 carboxylate alone does
+*not* catch this: a chain can sit a comfortable distance from the aspartate while
+overlapping the HLA elsewhere.
 
 **06 — Design sequences.** ProteinMPNN, `--sampling_temp 0.1 --omit_AAs C`, 8 sequences per backbone.
 
-**07 — Mechanism audit (the primary filter).** Confirm the designed reader group is within 3.2 Å of the Asp6 carboxylate and buried; then thread the WT peptide into the same model and confirm the reader is left unsatisfied and desolvated. A design that passes has a mechanism; one that fails has a correlation. Cheap, local, and it tests the thing being claimed. Both `biotite.structure.sasa` and freesasa are available, so burial can be cross-checked against an independent implementation.
+**07 — Mechanism audit (the primary filter).** Confirm the designed reader group is classified `core` or `support` against the Asp6 carboxylate under the Levy classification above (the 3.2 Å distance criterion this stage previously specified is superseded); then thread the WT peptide into the same model and confirm the reader is left unsatisfied and desolvated. A design that passes has a mechanism; one that fails has a correlation. Cheap, local, and it tests the thing being claimed. Both `biotite.structure.sasa` and freesasa are available, so burial can be cross-checked against an independent implementation.
 
 **08–11** as listed: PRODIGY on G12D and WT-threaded complexes ranked by difference; co-fold finalists against all three targets ranked by ipSAE(G12D) − max(ipSAE(WT), ipSAE(apo)); Foldseek/MMseqs2 novelty; pLDDT, ipSAE and mean Kyte–Doolittle hydropathy.
 
@@ -167,9 +213,43 @@ displacement is 0.236–0.279 Å in the mutants against 0.247–0.271 Å in the 
 
 ## Tools
 
-biotite · PDBFixer + OpenMM · RFdiffusion (Colab T4) · ProteinMPNN (local CPU) · PRODIGY · Boltz-2 / Chai-1 (Colab) · AlphaFold Server (finalists, full complex) · ipSAE · Foldseek, MMseqs2
+biotite · PDBFixer + OpenMM · Levy/Tien rSASA interface classification · RFdiffusion (Colab T4) · ProteinMPNN (local CPU) · PRODIGY · Boltz-2 / Chai-1 (Colab) · AlphaFold Server (finalists, full complex) · ipSAE · Foldseek, MMseqs2
 
 ---
+
+## Interface definition — Levy rSASA classification
+
+Interface residues are identified by the classification of Levy, *J Mol Biol*
+403:660 (2010), everywhere in this project. Distance cutoffs are not used to define
+interfaces; closest-approach distances are reported as descriptive numbers only.
+
+Per-residue SASA is computed in the complex and again with the partner group's atoms
+removed at identical coordinates, then divided by the theoretical maximum ASA of
+Tien et al., *PLoS ONE* 8:e80635 (2013). A residue counts as changed on binding if its
+absolute SASA loss exceeds 0.1 Å² — a tolerance rather than `> 0`, because
+Shrake–Rupley is a numerical quadrature and its noise must not manufacture interface
+residues. At a relative-SASA threshold of 0.25 each residue becomes `interior`,
+`surface`, `support`, `rim` or `core`; **interface = support + rim + core**, and
+**buried interface = core + support**.
+
+Why this rather than a cutoff: a cutoff counts residues that are near but not
+occluded, and says nothing about burial. The classification separates `core` (buried
+on binding) from `rim` (at the edge, still solvated), which is precisely the
+distinction this project's mechanistic claim rests on — that a designed reader group
+is buried and desolvated against the aspartate, not merely nearby.
+
+The implementation (`src/kras_pmhc/interface.py`) takes two *groups* of chains rather
+than two chains. The literal per-chain reading counts every internal interface, so on
+a binder + HLA + peptide system the HLA–peptide interface would swamp the signal being
+measured. Single-chain groups reproduce the per-chain case exactly.
+
+**Validation against a known answer.** On 7OW6, classifying the peptide against the
+HLA heavy chain puts Asp6 in `core` — rSASA 0.57 → 0.09, 93 Å² lost — which agrees
+with the independent stage-01 measurement of 7.4 Å² side-chain SASA for that residue.
+Classifying the same peptide against the TCR instead puts Asp6 in `rim`, losing only
+16 Å². So the TCR reads the aspartate without desolvating it, which is Poole et al.'s
+indirect-electrostatic mechanism recovered by a method that uses no distances at all.
+Both results are asserted in `tests/test_interface.py`.
 
 ## Affinity prediction — PRODIGY
 

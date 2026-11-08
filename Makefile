@@ -7,7 +7,13 @@
 PYTHON ?= python
 SCRIPTS := scripts
 
-.PHONY: help install fetch survey rotamers targets relax test lint clean
+.PHONY: help install fetch survey rotamers targets relax stage backbones test lint clean
+
+# Where scripts/05a_stage_to_drive.py puts the target for Colab to read, and
+# where scripts/05_ingest_backbones.py reads the results back from. Override on
+# the command line if Drive is mounted elsewhere:
+#     make stage DRIVE_DIR="/path/to/My Drive/kras_pmhc_stage05"
+DRIVE_DIR ?= $(HOME)/Library/CloudStorage/GoogleDrive-you@example.com/My Drive/kras_pmhc_stage05
 
 help:
 	@echo "Setup"
@@ -19,6 +25,10 @@ help:
 	@echo "  make rotamers  Asp rotamer scan -> results/rotamer_scan/"
 	@echo "  make targets   build design targets -> data/targets/"
 	@echo "  make relax     protonate + minimise targets -> data/targets_relaxed/"
+	@echo ""
+	@echo "Generation (stage 05; needs a GPU, so the middle step runs in Colab)"
+	@echo "  make stage     copy the target to Drive for notebooks/05_rfdiffusion_binder.ipynb"
+	@echo "  make backbones ingest generated backbones from Drive -> data/backbones/"
 	@echo ""
 	@echo "Quality"
 	@echo "  make test      run the test suite"
@@ -42,6 +52,12 @@ targets:
 
 relax:
 	$(PYTHON) $(SCRIPTS)/04_relax_targets.py
+
+stage:
+	$(PYTHON) $(SCRIPTS)/05a_stage_to_drive.py --drive-dir "$(DRIVE_DIR)"
+
+backbones:
+	$(PYTHON) $(SCRIPTS)/05_ingest_backbones.py --drive-dir "$(DRIVE_DIR)"
 
 test:
 	$(PYTHON) -m pytest

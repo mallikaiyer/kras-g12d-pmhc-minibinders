@@ -31,5 +31,11 @@ markers = ["needs_data: requires structures fetched into data/external/pdb"]
 [tool.ruff]
 line-length = 100
 
+# Notebooks are excluded deliberately. The RFdiffusion setup cell is reproduced
+# verbatim from sokrypton/ColabDesign so that upstream's dependency pinning is
+# preserved exactly, and reformatting it to satisfy a linter would defeat that.
+# Notebook cells are instead checked for syntax by tests/test_notebook.py.
+extend-exclude = ["notebooks"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

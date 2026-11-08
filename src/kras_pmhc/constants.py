@@ -133,3 +133,17 @@ THERMODYNAMICS = {
     "WT": {"dH": -9.56, "TdS": -1.82, "dG": -7.65, "dCp": -0.31},
     "G12D": {"dH": -20.32, "TdS": -8.13, "dG": -12.43, "dCp": -0.41},
 }
+
+
+# --- interface analysis (Levy 2010; Tien et al. 2013) ---------------------
+# Theoretical maximum solvent-accessible area per residue, A^2, from Tien
+# et al., PLoS ONE 8:e80635 (2013), used as the denominator for relative SASA.
+# These are the *theoretical* (Gly-X-Gly tripeptide) maxima rather than the
+# empirical ones: the empirical values are drawn from observed structures and
+# so already reflect burial, which is the quantity being measured here.
+MAX_ASA_TIEN_2013 = {
+    "ALA": 129.0, "ARG": 274.0, "ASN": 195.0, "ASP": 193.0, "CYS": 167.0,
+    "GLN": 225.0, "GLU": 223.0, "GLY": 104.0, "HIS": 224.0, "ILE": 197.0,
+    "LEU": 201.0, "LYS": 236.0, "MET": 224.0, "PHE": 240.0, "PRO": 159.0,
+    "SER": 155.0, "THR": 172.0, "TRP": 285.0, "TYR": 263.0, "VAL": 174.0,
+}
