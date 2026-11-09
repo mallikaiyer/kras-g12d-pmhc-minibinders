@@ -185,13 +185,37 @@ multi-chain targets are undocumented in its reference. Kept as the contingency i
 free Colab will not allocate a GPU, in which case the loss of noise control is
 recorded as a deviation.
 
-*Pilot gate.* Applied locally to the first 8 backbones. A backbone passes when **Asp6
-is an interface residue** (support, rim or core) **and the peptide carries ≥20% of the
-target-side interface area**. Production proceeds only if **≥4 of 8** pass. Fewer
-means the binder is landing on the α1/α2 helix tops — the predicted failure mode,
-since those are a far larger hydrophobic surface than a ten-residue peptide in a
-groove. Remedies, one pilot each: widen hotspots to `[C4,C5,C6,C7,C8]`; then the
-`Complex_beta` checkpoint for less helical topologies.
+*Design gate.* Applied locally, after generation. A backbone passes when all four
+hold:
+
+1. its backbone comes no closer than **2.0 Å** to the target backbone;
+2. **Asp6 is an interface residue** — support, rim or core under the Levy
+   classification;
+3. **Asp6 loses ≥10 Å² of SASA** on binding; and
+4. the **peptide carries ≥10%** of the target-side interface ΔSASA.
+
+Criteria 3 and 4 encode the project's two leading objectives separately, and in the
+right order. Criterion 3 is absolute and stands for *mutation specificity*: does the
+binder actually read Asp6? Criterion 4 is a ratio and stands for *peptide-dependent
+binding*: is the peptide central to the interface or incidental to an HLA-dominated
+one? Its bar is deliberately the weaker of the two, because specificity outranks
+peptide-dependence in this project's ranking.
+
+The gate originally used criterion 4 alone at ≥20%, which inverted that ranking. Over
+the first 50 designs it rejected `nim3_8` (41 Å² of Asp6 burial, 17% share) while
+admitting `nim1_1` (15 Å², 37% share) and `nim2_4` (6.7 Å², 41% share) — i.e. it
+preferred a design that sits on the peptide without touching the mutated residue to
+one that buries it. Nine excluded designs had more peptide contact than the weakest
+admitted one. The 10 Å² threshold is set at a gap in the observed distribution:
+losses run …15.7, 14.7, 11.2, then 6.7, 4.3, 0.
+
+A failure mode was predicted before generation and is confirmed: the binder tends to
+land on the α1/α2 helix tops, a far larger hydrophobic surface than a ten-residue
+peptide in a groove. 18 of 50 designs leave Asp6 fully `surface`. Remedies available
+but not needed at this scale: widen hotspots to `[C4,C5,C6,C7,C8]`; or the
+`Complex_beta` checkpoint for less helical topologies. Note that *all* 50 designs
+came back 84–97% helix with zero strand content, so the topology search never
+explored sheets.
 
 Hard validation, separate from the gate because these are bugs rather than design
 failures: target backbone RMSD < 0.1 Å measured **without superposition** (RFdiffusion

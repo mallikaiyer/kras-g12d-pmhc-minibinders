@@ -52,8 +52,24 @@ HLA_CHAIN = "A"
 # Both conditions must hold for a backbone to count as engaging the mutation.
 #: Asp6 must be an interface residue - support, rim or core.
 GATE_ASP6_CLASSES = interface.INTERFACE_CLASSES
+#: and it must lose at least this much absolute SASA on binding. This is the
+#: criterion for *mutation specificity*, and it has to be absolute: peptide
+#: share is a ratio, and using it alone let a design be rejected for burying
+#: more HLA even when it buried more of Asp6. Measured across the first 50
+#: designs, nim3_8 lost 41 A2 of Asp6 and failed a 20% share rule while nim1_1
+#: lost 15 A2 and passed - which inverts the project's own ranking, where
+#: mutation specificity outranks peptide-dependent binding.
+#:
+#: 10 A2 is not a round number but a gap in the data: the Asp6 losses over
+#: those 50 designs run ... 15.7, 14.7, 11.2, then 6.7, 4.3, 0.
+GATE_MIN_ASP6_SASA_LOSS = 10.0
+
 #: and the peptide must carry at least this share of target-side interface area.
-GATE_MIN_PEPTIDE_SHARE = 0.20
+#: Lowered from 0.20 to 0.10 when the criterion above was added: this is the
+#: proxy for *peptide-dependent* binding, and its job is to exclude designs
+#: where the peptide is incidental to an HLA-dominated interface - not to
+#: outrank the burial of the mutated residue.
+GATE_MIN_PEPTIDE_SHARE = 0.10
 #: Proceed to production only if at least this many of the pilot's 8 pass.
 GATE_MIN_PASSING = 4
 
@@ -176,6 +192,7 @@ def score(
     passes = (
         not clashes
         and asp6.klass in GATE_ASP6_CLASSES
+        and asp6.sasa_loss >= GATE_MIN_ASP6_SASA_LOSS
         and peptide_share >= GATE_MIN_PEPTIDE_SHARE
     )
 
@@ -362,8 +379,9 @@ def main() -> int:
     clashing = [row for row in rows if row["clashes"]]
 
     print(f"\ngate: {len(passing)}/{len(rows)} engage Asp6")
-    print(f"  Asp6 is support/rim/core and peptide carries "
-          f">= {GATE_MIN_PEPTIDE_SHARE:.0%} of target interface area")
+    print(f"  Asp6 is support/rim/core, loses >= {GATE_MIN_ASP6_SASA_LOSS:.0f} A2 "
+          f"of SASA, and the peptide carries >= {GATE_MIN_PEPTIDE_SHARE:.0%} "
+          "of target-side interface area")
     repack = [row for row in rows if row["needs_repack"]]
     if clashing:
         print(f"  {len(clashing)} rejected: backbone inside the target "

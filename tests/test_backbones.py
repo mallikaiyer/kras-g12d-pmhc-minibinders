@@ -323,18 +323,20 @@ def test_every_interface_is_mutual():
         )
 
 
-def test_the_gate_column_agrees_with_its_three_criteria():
+def test_the_gate_column_agrees_with_its_four_criteria():
     """The recorded verdict must be reproducible from the recorded evidence.
 
-    Three criteria, not two: a design that overlaps the target is excluded
-    regardless of its Levy classification, because its interface areas were
-    computed from interpenetrating atoms and mean nothing.
+    Four criteria. Asp6 must be at the interface *and* lose at least 10 A2 of
+    SASA - the absolute measure of mutation specificity - while peptide share
+    is a weak veto at 10% against HLA-dominated interfaces. The share-only rule
+    this replaced rejected designs that buried more of Asp6 than ones it kept.
     """
     for row in _manifest_rows():
         expected = (
             row["clashes"] == "False"
             and row["asp6_class"] in interface.INTERFACE_CLASSES
-            and float(row["peptide_share"]) >= 0.20
+            and float(row["asp6_sasa_loss"]) >= 10.0
+            and float(row["peptide_share"]) >= 0.10
         )
         assert (row["passes_gate"] == "True") is expected, row["backbone_id"]
 
