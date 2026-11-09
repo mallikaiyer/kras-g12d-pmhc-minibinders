@@ -115,6 +115,43 @@ at most one batch and cell 6 can simply be re-run to resume.
 make backbones
 ```
 
+## Kaggle route (`notebooks/05_kaggle_rfdiffusion_binder.ipynb`)
+
+Used when Colab cannot provision a runtime. Same target, contigs, hotspots and
+noise scale; only the transport and the interpreter differ.
+
+Kaggle's image is Python 3.13, where `pip install dgl` resolves to **dgl 0.1.3**,
+a 2018 universal wheel that cannot be imported. Verified locally:
+
+```
+pip download dgl --python-version 3.12 ...  ->  dgl-2.1.0-cp312-cp312-...whl
+pip download dgl --python-version 3.13 ...  ->  dgl-0.1.3-py3-none-...whl
+```
+
+So cell 2 builds a Python 3.12 environment with `uv` and every later cell uses
+it. It then probes the environment by putting a DGL graph on the GPU - importing
+dgl is not sufficient, because PyPI's dgl is a CPU build that fails only at
+`g.to('cuda')` - and refuses to continue if that fails.
+
+### Procedure
+
+1. **Session options**: Accelerator **GPU T4**, Internet **On**. Both need phone
+   verification on the Kaggle account.
+2. **+ Add Input -> Datasets -> New Dataset**: upload
+   `data/targets_relaxed/7ow3_L_G6D_chi1m70_chi2p120_relaxed_crop.pdb`. The slug
+   does not matter - cell 3 searches `/kaggle/input` by filename and verifies the
+   SHA-256 against the constant in cell 1.
+3. Run cells 1-5, then cell 6 (the pilot of 8). Stop.
+4. Download the output, unzip, and on the Mac:
+   `make backbones DRIVE_DIR=<unzipped>/stage05 RELABEL=1`
+5. If the gate passes, run cell 7 to the cutoff, then cell 8, then re-ingest.
+
+`RELABEL=1` is required for this route and must **not** be used for Colab output.
+Raw RFdiffusion output is one continuously renumbered chain; the Colab notebook
+re-split it with ColabDesign's `fix_pdb`, whereas this route writes it verbatim
+and the chains are restored on the Mac by `kras_pmhc.nim.relabel_chains`, which
+is tested. There is deliberately only one implementation of that step.
+
 ## Session log
 
 Fill in as the run proceeds. This is the record of what actually happened, not what

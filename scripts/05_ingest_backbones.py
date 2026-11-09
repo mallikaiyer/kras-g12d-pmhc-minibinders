@@ -35,7 +35,7 @@ from biotite.structure.io.pdb import PDBFile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from kras_pmhc import backbones, interface, structures  # noqa: E402
+from kras_pmhc import backbones, interface, nim, structures  # noqa: E402
 from kras_pmhc.constants import ASP_CARBOXYLATE_ATOMS, MUTANT_POSITION  # noqa: E402
 from kras_pmhc.geometry import min_distance  # noqa: E402
 
@@ -228,6 +228,16 @@ def main() -> int:
         default="7ow3_L_G6D_chi1m70_chi2p120_relaxed_crop.pdb",
         help="reference target in data/targets_relaxed/, for the RMSD check",
     )
+    parser.add_argument(
+        "--relabel-contigs",
+        help=(
+            "contig string, e.g. 'A1-180/0 C1-10/0 60-75'. Use when the inputs "
+            "are raw RFdiffusion output, which is one continuously renumbered "
+            "chain: the target's chain ids and numbering are restored here "
+            "rather than in the notebook, so there is one tested implementation "
+            "of it (kras_pmhc.nim.relabel_chains) instead of one per transport."
+        ),
+    )
     args = parser.parse_args()
 
     drive_dir = args.drive_dir.expanduser()
@@ -244,13 +254,25 @@ def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     print(f"ingesting {len(generated)} backbone(s) from {source_dir}")
+    if args.relabel_contigs:
+        print(f"relabelling chains from contigs: {args.relabel_contigs}")
     rows = []
     for path in generated:
         backbone_id = path.stem
         local = OUT_DIR / path.name
         shutil.copy2(path, local)
 
-        row, records = score(read_pdb(local), reference, backbone_id, log.get(path.name, {}))
+        array = read_pdb(local)
+        if args.relabel_contigs:
+            # Raw RFdiffusion output is one continuously renumbered chain. The
+            # corrected file is written back, so every later stage reads chains
+            # A/C/B and no stage has to repeat this.
+            array = nim.relabel_chains(array, args.relabel_contigs)
+            relabelled = PDBFile()
+            relabelled.set_structure(array)
+            relabelled.write(str(local))
+
+        row, records = score(array, reference, backbone_id, log.get(path.name, {}))
         write_interface_table(backbone_id, records)
         rows.append(row)
 

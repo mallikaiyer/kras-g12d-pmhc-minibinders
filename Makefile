@@ -28,7 +28,8 @@ help:
 	@echo ""
 	@echo "Generation (stage 05; needs a GPU, so the middle step runs in Colab)"
 	@echo "  make stage     copy the target to Drive for notebooks/05_rfdiffusion_binder.ipynb"
-	@echo "  make backbones ingest generated backbones from Drive -> data/backbones/"
+	@echo "  make backbones ingest generated backbones -> data/backbones/"
+	@echo "                 (add RELABEL=1 for raw output from the Kaggle route)"
 	@echo "  make nim-smoke one design via the NVIDIA NIM API (proves the request)"
 	@echo "  make nim       pilot of 8 via the NVIDIA NIM API (no GPU needed)"
 	@echo ""
@@ -58,8 +59,16 @@ relax:
 stage:
 	$(PYTHON) $(SCRIPTS)/05a_stage_to_drive.py --drive-dir "$(DRIVE_DIR)"
 
+# Raw RFdiffusion output is one continuously renumbered chain. The Kaggle
+# route writes it verbatim, so it needs relabelling at ingest; the Colab route
+# relabelled in the notebook and does not. Pass RELABEL=1 for the former:
+#     make backbones DRIVE_DIR=<unzipped>/stage05 RELABEL=1
+RELABEL ?=
+CONTIGS ?= A1-180/0 C1-10/0 60-75
+
 backbones:
-	$(PYTHON) $(SCRIPTS)/05_ingest_backbones.py --drive-dir "$(DRIVE_DIR)"
+	$(PYTHON) $(SCRIPTS)/05_ingest_backbones.py --drive-dir "$(DRIVE_DIR)" \
+	  $(if $(RELABEL),--relabel-contigs "$(CONTIGS)",)
 
 # Fallback transport for stage 05 when no GPU is available. Needs an API key in
 # .nim_api_key (gitignored). NIM_DIR is where backbones and run_log.tsv land, in
