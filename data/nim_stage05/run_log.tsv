@@ -1,0 +1,2 @@
+batch	seed	design	filename	contigs	hotspots	noise_scale	diffuser_T	checkpoint	elapsed_s	written_utc
+0	0	0	nim0_0.pdb	A1-180/0 C1-10/0 60-75	C5,C6,C7	default(api)	50	nim-hosted(unspecified)	17.3	2026-11-09T19:14:17+00:00

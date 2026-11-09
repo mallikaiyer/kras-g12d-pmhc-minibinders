@@ -22,6 +22,13 @@ from biotite.structure import AtomArray
 #: to whether side chains survived the round trip.
 BACKBONE_ATOMS = ("N", "CA", "C", "O")
 
+#: The atoms that define a residue's rigid frame. RFdiffusion diffuses frames
+#: and rebuilds the carbonyl oxygen from idealised internal geometry, so O in
+#: its output is *not* the input oxygen: measured against the stage-04 target on
+#: 9 Nov 2026, N/CA/C agree to ~0.1 A rms while O differs by 0.37 A rms and up
+#: to 2.4 A. Comparisons of target geometry therefore use these three.
+FRAME_ATOMS = ("N", "CA", "C")
+
 #: Secondary-structure codes from ``biotite.structure.annotate_sse``.
 SSE_HELIX = "a"
 SSE_STRAND = "b"
@@ -55,8 +62,10 @@ def binder_chain(array: AtomArray, target_chains: list[str]) -> str:
     return remaining[0]
 
 
-def _backbone_index(array: AtomArray, chains: list[str]) -> dict[tuple, int]:
-    mask = np.isin(array.chain_id, chains) & np.isin(array.atom_name, BACKBONE_ATOMS)
+def _backbone_index(
+    array: AtomArray, chains: list[str], atoms: tuple[str, ...] = BACKBONE_ATOMS
+) -> dict[tuple, int]:
+    mask = np.isin(array.chain_id, chains) & np.isin(array.atom_name, atoms)
     return {
         (
             str(array.chain_id[i]),
@@ -73,11 +82,15 @@ def target_backbone_rmsd(
 ) -> float:
     """RMSD of the target backbone against the structure it was generated from.
 
-    Computed **without superposition**, deliberately. RFdiffusion holds the
-    target fixed at every denoising step, so the coordinates should be identical
-    to the input. A superimposed RMSD would hide a rigid-body shift, which is
-    exactly the failure this check exists to catch - it would mean the output
-    was misparsed, the contig was wrong, or the chains were reassigned.
+    Computed **without superposition**, so a rigid-body displacement shows up
+    here as a large number. That is informative but is *not* on its own a
+    failure: RFdiffusion recentres its input, so its output is routinely
+    translated by tens of angstroms from the structure it was given. Measured
+    at 81 A RMS on the first NIM design of 9 Nov 2026.
+
+    What must not happen is the target changing *shape*, and that is what
+    :func:`superimpose_on_target` measures. Use this function to report the
+    offset, that one to decide whether the geometry survived.
 
     Only atoms present in both structures are compared.
 
@@ -97,6 +110,71 @@ def target_backbone_rmsd(
     a = array.coord[[generated[key] for key in shared]]
     b = reference.coord[[original[key] for key in shared]]
     return float(np.sqrt(np.mean(np.sum((a - b) ** 2, axis=1))))
+
+
+def superimpose_on_target(
+    array: AtomArray, reference: AtomArray, target_chains: list[str]
+) -> tuple[AtomArray, float]:
+    """Move a generated structure into the reference's frame, by its target.
+
+    RFdiffusion holds the target rigid during denoising but writes the result
+    recentred, so the output sits in a different frame from the stage-04 target
+    it was conditioned on. Superimposing on the *target* backbone alone undoes
+    exactly that rigid-body move and carries the binder along with it, which is
+    legitimate precisely because the target was never allowed to flex.
+
+    The returned RMSD is therefore a shape check: small when the target
+    survived, and large when the output was misparsed, the contig was wrong, or
+    the chains were reassigned. It is computed over :data:`FRAME_ATOMS` only,
+    because the carbonyl oxygen is rebuilt rather than carried through.
+
+    Returns:
+        The whole array transformed into the reference frame, and the RMSD of
+        the target backbone after superposition.
+
+    Raises:
+        ValueError: if the two share no backbone atoms at matching positions.
+    """
+    generated = _backbone_index(array, target_chains, FRAME_ATOMS)
+    original = _backbone_index(reference, target_chains, FRAME_ATOMS)
+
+    shared = sorted(set(generated) & set(original))
+    if not shared:
+        raise ValueError(
+            "generated structure and reference share no target backbone atoms; "
+            "chain ids or residue numbering differ"
+        )
+
+    mobile = array[[generated[key] for key in shared]]
+    fixed = reference[[original[key] for key in shared]]
+
+    fitted, transform = struc.superimpose(fixed, mobile)
+    rmsd = float(struc.rmsd(fixed, fitted))
+    return transform.apply(array), rmsd
+
+
+def splice_binder(
+    reference: AtomArray, generated: AtomArray, binder: str
+) -> AtomArray:
+    """Full-atom target plus generated binder, in the reference's frame.
+
+    RFdiffusion emits backbone atoms only - for the target as well as the
+    binder - so its output cannot be used directly for interface analysis: a
+    side-chain-free target has nothing to bury, and Asp6's carboxylate, the
+    whole point of this design problem, is simply absent.
+
+    Since the target was held rigid, its side chains are known exactly: they
+    are the ones in the stage-04 reference. This reattaches them by keeping the
+    reference intact and adding only the generated chain. ``generated`` must
+    already be in the reference frame - see :func:`superimpose_on_target`.
+
+    The binder itself stays backbone-only, which is correct at this stage: it
+    has no sequence yet.
+    """
+    chain = generated[generated.chain_id == binder]
+    if chain.array_length() == 0:
+        raise ValueError(f"generated structure has no chain {binder}")
+    return reference + chain
 
 
 def secondary_structure_fraction(array: AtomArray, chain_id: str) -> dict[str, float]:

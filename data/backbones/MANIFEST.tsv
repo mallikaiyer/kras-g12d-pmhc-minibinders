@@ -1,0 +1,2 @@
+backbone_id	batch	seed	binder_chain	binder_length	target_rmsd	target_offset	asp6_class	asp6_delta_rsasa	asp6_sasa_loss	peptide_interface_area	hla_interface_area	peptide_share	n_core_binder	n_support_binder	n_rim_binder	n_interface_binder	n_interface_target	buried_interface_area	helix	strand	coil	min_dist_to_target	min_dist_to_carboxylate	passes_gate
+nim0_0	0	0	B	72	0.104	77.33	rim	0.0224	4.32	15.03	168.92	0.0817	1	0	10	11	8	63.0	0.917	0.0	0.083	3.54	5.7	False

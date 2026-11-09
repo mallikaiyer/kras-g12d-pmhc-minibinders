@@ -58,8 +58,11 @@ GATE_MIN_PEPTIDE_SHARE = 0.20
 GATE_MIN_PASSING = 4
 
 # --- hard validation ------------------------------------------------------
-#: RFdiffusion holds the target fixed, so this is a parsing check, not physics.
-MAX_TARGET_RMSD = 0.1
+#: Shape of the target after superposition, over N/CA/C. This is a parsing
+#: check rather than physics, and the two outcomes it separates are far apart:
+#: the target's frames are reproduced to ~0.1 A, while a mis-assigned chain
+#: ordering gave 21.6 A. 0.5 sits between them with room for both.
+MAX_TARGET_RMSD = 0.5
 MIN_BINDER_LENGTH = 60
 MAX_BINDER_LENGTH = 75
 #: Below this the generated chain overlaps the target rather than touching it.
@@ -70,7 +73,8 @@ MIN_HEAVY_ATOM_APPROACH = 2.0
 
 MANIFEST_FIELDS = (
     "backbone_id", "batch", "seed", "binder_chain", "binder_length",
-    "target_rmsd", "asp6_class", "asp6_delta_rsasa", "asp6_sasa_loss",
+    "target_rmsd", "target_offset",
+    "asp6_class", "asp6_delta_rsasa", "asp6_sasa_loss",
     "peptide_interface_area", "hla_interface_area", "peptide_share",
     "n_core_binder", "n_support_binder", "n_rim_binder",
     "n_interface_binder", "n_interface_target", "buried_interface_area",
@@ -102,8 +106,16 @@ def read_run_log(drive_dir: Path) -> dict[str, dict]:
         return {row["filename"]: row for row in csv.DictReader(handle, delimiter="\t")}
 
 
-def score(array, reference, backbone_id: str, log_row: dict) -> tuple[dict, list]:
-    """Metrics for one generated backbone, plus its per-residue Levy table."""
+def score(
+    array, shape_rmsd: float, offset: float, backbone_id: str, log_row: dict
+) -> tuple[dict, list]:
+    """Metrics for one generated backbone, plus its per-residue Levy table.
+
+    ``array`` is the spliced complex - the full-atom stage-04 target with the
+    generated binder added - not raw generator output. The interface numbers
+    would be meaningless otherwise: RFdiffusion emits backbone atoms only, and
+    a target without side chains has nothing to bury.
+    """
     binder = backbones.binder_chain(array, TARGET_CHAINS)
 
     records = interface.classify(array, [binder], TARGET_CHAINS)
@@ -142,9 +154,12 @@ def score(array, reference, backbone_id: str, log_row: dict) -> tuple[dict, list
         "seed": log_row.get("seed", ""),
         "binder_chain": binder,
         "binder_length": backbones.chain_length(array, binder),
-        "target_rmsd": round(
-            backbones.target_backbone_rmsd(array, reference, TARGET_CHAINS), 4
-        ),
+        # Shape check, after superposition on the target backbone.
+        "target_rmsd": round(shape_rmsd, 4),
+        # Rigid-body displacement of the generator's output from the reference.
+        # Reported, not judged: RFdiffusion recentres, so tens of angstroms
+        # here is normal and says nothing about whether the geometry survived.
+        "target_offset": round(offset, 2),
         "asp6_class": asp6.klass,
         "asp6_delta_rsasa": asp6.delta_rsasa,
         "asp6_sasa_loss": round(asp6.sasa_loss, 2),
@@ -193,8 +208,9 @@ def validate(rows: list[dict]) -> list[str]:
         name = row["backbone_id"]
         if row["target_rmsd"] >= MAX_TARGET_RMSD:
             problems.append(
-                f"{name}: target backbone moved {row['target_rmsd']} A - the "
-                "output was misparsed or the contig was wrong"
+                f"{name}: target shape changed by {row['target_rmsd']} A "
+                "after superposition - the output was misparsed, the contig "
+                "was wrong, or the chains were assigned in the wrong order"
             )
         if not MIN_BINDER_LENGTH <= row["binder_length"] <= MAX_BINDER_LENGTH:
             problems.append(
@@ -264,15 +280,28 @@ def main() -> int:
 
         array = read_pdb(local)
         if args.relabel_contigs:
-            # Raw RFdiffusion output is one continuously renumbered chain. The
-            # corrected file is written back, so every later stage reads chains
-            # A/C/B and no stage has to repeat this.
+            # Raw RFdiffusion output is one continuously renumbered chain.
             array = nim.relabel_chains(array, args.relabel_contigs)
-            relabelled = PDBFile()
-            relabelled.set_structure(array)
-            relabelled.write(str(local))
 
-        row, records = score(array, reference, backbone_id, log.get(path.name, {}))
+        # Generator output is backbone-only and recentred. Undo the recentering
+        # by superimposing on the target, then reattach the target's real side
+        # chains by splicing the binder onto the stage-04 reference. The result
+        # is what gets stored and scored: every later stage wants the full-atom
+        # complex in the stage-04 frame, not raw generator output.
+        binder = backbones.binder_chain(array, TARGET_CHAINS)
+        offset = backbones.target_backbone_rmsd(array, reference, TARGET_CHAINS)
+        aligned, shape_rmsd = backbones.superimpose_on_target(
+            array, reference, TARGET_CHAINS
+        )
+        complexed = backbones.splice_binder(reference, aligned, binder)
+
+        spliced = PDBFile()
+        spliced.set_structure(complexed)
+        spliced.write(str(local))
+
+        row, records = score(
+            complexed, shape_rmsd, offset, backbone_id, log.get(path.name, {})
+        )
         write_interface_table(backbone_id, records)
         rows.append(row)
 

@@ -34,6 +34,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+import biotite.structure as struc
 import numpy as np
 from biotite.structure import AtomArray
 
@@ -57,6 +58,11 @@ BACKOFF_BASE_S = 4.0
 #: keep polling before giving up on it.
 POLL_INTERVAL_S = 5.0
 POLL_TIMEOUT_S = 900.0
+
+#: How closely the putative target CA trace must match the reference for a
+#: chain ordering to be accepted. The correct ordering comes in well under
+#: this (0.09 A observed); the wrong one is off by tens of angstroms.
+LAYOUT_RMSD_TOLERANCE_A = 1.0
 
 #: Chain id given to the generated binder. The target keeps A and C, matching
 #: the staged crop, so the ingest script's chain assumptions still hold.
@@ -275,13 +281,91 @@ def parse_contig_segments(contigs: str) -> list[tuple[str, int, int]]:
     return segments
 
 
-def relabel_chains(array: AtomArray, contigs: str) -> AtomArray:
+def _residue_starts(array: AtomArray) -> np.ndarray:
+    """Index of the first atom of each residue, plus a terminating index."""
+    boundaries = (
+        np.where(
+            (array.res_id[1:] != array.res_id[:-1])
+            | (array.chain_id[1:] != array.chain_id[:-1])
+        )[0]
+        + 1
+    )
+    return np.concatenate(([0], boundaries, [len(array)]))
+
+
+def resolve_layout(array: AtomArray, reference: AtomArray, contigs: str) -> bool:
+    """Work out whether the generated chain precedes the target in the output.
+
+    The contig string puts the binder last, but this endpoint's RFdiffusion
+    writes the diffused chain **first**, and nothing in the response says so.
+    Guessing is not acceptable here: labelling the binder's residues as HLA
+    produced a plausible-looking manifest whose interface numbers were entirely
+    fictitious, which is how this function came to exist.
+
+    So the layout is measured. Each hypothesis is tested by superimposing the
+    putative target CA trace onto the reference: the correct one reproduces the
+    target's own geometry, because the target is held rigid during denoising.
+    Observed on 9 Nov 2026: 0.09 A for binder-first against 21.70 A for
+    target-first.
+
+    Returns:
+        True if the generated chain comes first.
+
+    Raises:
+        NimError: if neither hypothesis recovers the target geometry, which
+            means the output does not contain the target we conditioned on.
+    """
+    segments = parse_contig_segments(contigs)
+    chains = [chain for chain, _, _ in segments]
+    n_target = sum(high - low + 1 for _, low, high in segments)
+
+    generated = array[array.atom_name == "CA"]
+    target = reference[
+        (reference.atom_name == "CA") & np.isin(reference.chain_id, chains)
+    ]
+    if len(target) != n_target:
+        raise NimError(
+            f"reference has {len(target)} CA atoms in chains {chains} but the "
+            f"contigs describe {n_target}"
+        )
+    n_binder = len(generated) - n_target
+    if n_binder <= 0:
+        raise NimError(
+            f"output has {len(generated)} residues but the target alone needs "
+            f"{n_target}; no binder was generated"
+        )
+
+    scores = {}
+    for binder_first, window in (
+        (False, slice(0, n_target)),
+        (True, slice(n_binder, n_binder + n_target)),
+    ):
+        fitted, _ = struc.superimpose(target, generated[window])
+        scores[binder_first] = float(struc.rmsd(target, fitted))
+
+    binder_first = min(scores, key=scores.get)
+    if scores[binder_first] > LAYOUT_RMSD_TOLERANCE_A:
+        raise NimError(
+            "neither chain ordering recovers the target geometry "
+            f"(binder-first {scores[True]:.2f} A, target-first "
+            f"{scores[False]:.2f} A); the output does not contain the target "
+            "that was sent"
+        )
+    return binder_first
+
+
+def relabel_chains(
+    array: AtomArray, contigs: str, binder_first: bool = False
+) -> AtomArray:
     """Restore the target's chain ids and numbering in RFdiffusion output.
 
     RFdiffusion renumbers its output as one continuous chain, which is why the
     Colab route called ColabDesign's ``fix_pdb``. This is the same operation
-    done locally: the leading residues are the fixed target segments in contig
-    order, and whatever follows is the generated binder.
+    done locally.
+
+    ``binder_first`` says which end of the output the generated chain sits at.
+    Do not set it by assumption - :func:`resolve_layout` measures it against
+    the reference structure.
 
     Fails rather than guesses if the residue count does not match the contigs.
     A mismatch means the API interpreted the contig string differently than we
@@ -291,15 +375,7 @@ def relabel_chains(array: AtomArray, contigs: str) -> AtomArray:
     segments = parse_contig_segments(contigs)
     expected_target = sum(high - low + 1 for _, low, high in segments)
 
-    starts = np.append(
-        np.where(
-            (array.res_id[1:] != array.res_id[:-1])
-            | (array.chain_id[1:] != array.chain_id[:-1])
-        )[0]
-        + 1,
-        len(array),
-    )
-    starts = np.insert(starts, 0, 0)
+    starts = _residue_starts(array)
     n_residues = len(starts) - 1
 
     if n_residues <= expected_target:
@@ -308,21 +384,21 @@ def relabel_chains(array: AtomArray, contigs: str) -> AtomArray:
             f"{expected_target}; no binder was generated"
         )
 
+    target_labels = [
+        (chain, res_id)
+        for chain, low, high in segments
+        for res_id in range(low, high + 1)
+    ]
+    binder_labels = [
+        (BINDER_CHAIN_ID, i + 1) for i in range(n_residues - expected_target)
+    ]
+    labels = (
+        binder_labels + target_labels if binder_first else target_labels + binder_labels
+    )
+
     relabelled = array.copy()
-    residue_index = 0
-    for chain, low, high in segments:
-        for res_id in range(low, high + 1):
-            lo, hi = starts[residue_index], starts[residue_index + 1]
-            relabelled.chain_id[lo:hi] = chain
-            relabelled.res_id[lo:hi] = res_id
-            residue_index += 1
-
-    binder_res_id = 1
-    while residue_index < n_residues:
-        lo, hi = starts[residue_index], starts[residue_index + 1]
-        relabelled.chain_id[lo:hi] = BINDER_CHAIN_ID
-        relabelled.res_id[lo:hi] = binder_res_id
-        residue_index += 1
-        binder_res_id += 1
-
+    for index, (chain, res_id) in enumerate(labels):
+        lo, hi = starts[index], starts[index + 1]
+        relabelled.chain_id[lo:hi] = chain
+        relabelled.res_id[lo:hi] = res_id
     return relabelled

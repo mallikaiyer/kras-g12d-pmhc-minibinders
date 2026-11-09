@@ -94,16 +94,28 @@ def next_seed(log: list[dict], seed_start: int) -> int:
     return max(used) + 1 if used else seed_start
 
 
-def write_backbone(out_dir: Path, name: str, pdb_text: str) -> Path:
-    """Relabel chains, then write.
+def write_backbone(out_dir: Path, name: str, pdb_text: str, reference) -> Path:
+    """Keep the raw response, then write a chain-labelled copy beside it.
 
     The relabelling is the one piece of real work on this side: RFdiffusion
     returns a single renumbered chain, and every interface number computed
-    later depends on chain A/C being the target and B the binder.
+    later depends on chain A/C being the target and B the binder. Which end of
+    the output the binder sits at is *measured* against the reference by
+    ``nim.resolve_layout`` - this endpoint writes it first, the contig string
+    says last, and getting it backwards yields a manifest full of fictitious
+    interface numbers rather than an error.
+
+    The unmodified response is saved under ``raw/`` as well. It is the only
+    record of what the service actually returned, and relabelling in place
+    destroyed it on the first run.
     """
-    source = PDBFile.read(io.StringIO(pdb_text))
-    array = source.get_structure(model=1)
-    relabelled = nim.relabel_chains(array, CONTIGS)
+    raw = out_dir / "raw" / name
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    raw.write_text(pdb_text)
+
+    array = PDBFile.read(io.StringIO(pdb_text)).get_structure(model=1)
+    binder_first = nim.resolve_layout(array, reference, CONTIGS)
+    relabelled = nim.relabel_chains(array, CONTIGS, binder_first=binder_first)
 
     destination = out_dir / "backbones" / name
     out = PDBFile()
@@ -159,6 +171,9 @@ def main() -> int:
     print(f"starting at batch {batch}, seed {seed}")
 
     pdb_text = target_path.read_text()
+    # Parsed once: resolve_layout needs it for every design, to decide which
+    # end of the output the generated chain sits at.
+    reference = PDBFile.read(str(target_path)).get_structure(model=1)
     written = 0
     failures = 0
 
@@ -193,7 +208,7 @@ def main() -> int:
             continue
 
         name = f"nim{batch}_{written}.pdb"
-        path = write_backbone(out_dir, name, design.pdb_text)
+        path = write_backbone(out_dir, name, design.pdb_text, reference)
         append_log(out_dir, {
             "batch": batch,
             "seed": seed,

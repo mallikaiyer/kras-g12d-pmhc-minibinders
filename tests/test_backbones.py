@@ -250,10 +250,28 @@ def _manifest_rows():
 
 def test_every_backbone_left_the_target_alone():
     """Mirrors the script's threshold deliberately: if the script loosens its
-    bound, this should fail rather than follow."""
+    bound, this should fail rather than follow.
+
+    0.5 A rather than 0.1 because the quantity changed meaning. It is now the
+    RMSD over N/CA/C *after* superposition, and RFdiffusion rebuilds backbone
+    atoms from rigid frames, so the target returns ~0.1 A from the input rather
+    than identical to it. The failure this exists to catch - chains assigned in
+    the wrong order - measured 21.6 A, so the bound is nowhere near it.
+    """
     for row in _manifest_rows():
         rmsd = float(row["target_rmsd"])
-        assert rmsd < 0.1, f"{row['backbone_id']}: target moved {rmsd} A"
+        assert rmsd < 0.5, f"{row['backbone_id']}: target shape changed {rmsd} A"
+
+
+def test_the_recentering_offset_is_recorded_rather_than_judged():
+    """RFdiffusion recentres its output, by ~81 A on the first NIM design.
+
+    That is not a defect, so no threshold is applied to it - but it must be in
+    the manifest, because a reader comparing coordinates between the generated
+    file and the stage-04 target needs to know a rigid-body move happened.
+    """
+    for row in _manifest_rows():
+        assert float(row["target_offset"]) >= 0.0
 
 
 def test_every_binder_is_the_requested_length():
@@ -287,3 +305,63 @@ def test_the_gate_column_agrees_with_its_two_criteria():
             and float(row["peptide_share"]) >= 0.20
         )
         assert (row["passes_gate"] == "True") is expected, row["backbone_id"]
+
+
+# --- moving generator output into the reference frame ---------------------
+
+
+def test_a_rigidly_moved_target_superimposes_back_onto_the_reference(target):
+    """RFdiffusion recentres its output, so this has to be undone, not flagged."""
+    moved = target.copy()
+    angle = np.pi / 3
+    rotation = np.array([
+        [np.cos(angle), -np.sin(angle), 0.0],
+        [np.sin(angle), np.cos(angle), 0.0],
+        [0.0, 0.0, 1.0],
+    ])
+    moved.coord = moved.coord @ rotation.T + np.array([40.0, -15.0, 7.0])
+
+    aligned, rmsd = backbones.superimpose_on_target(moved, target, ["A", "C"])
+    # 1e-3, not 0: PDB coordinates are float32, so superposition of an exact
+    # rigid move lands a few times 1e-5 away rather than on zero.
+    assert rmsd < 1e-3, f"a rigid move should superimpose exactly, got {rmsd}"
+    assert np.allclose(
+        aligned.coord[np.isin(aligned.chain_id, ["A", "C"])],
+        target.coord[np.isin(target.chain_id, ["A", "C"])],
+        atol=1e-4,
+    )
+
+
+def test_a_deformed_target_does_not_superimpose_back(target):
+    """The check must still catch a target that changed shape."""
+    bent = target.copy()
+    half = bent.array_length() // 2
+    bent.coord[half:] += np.array([5.0, 0.0, 0.0])
+
+    _, rmsd = backbones.superimpose_on_target(bent, target, ["A", "C"])
+    assert rmsd > 1.0, f"a deformation should not superimpose away, got {rmsd}"
+
+
+def test_splicing_restores_the_target_side_chains(target, synthetic):
+    """The whole reason splice_binder exists.
+
+    Generator output is backbone-only, so the spliced complex must carry the
+    reference's side chains - otherwise Asp6 has no carboxylate and the Levy
+    classification has nothing to measure.
+    """
+    docked = synthetic
+    binder = backbones.binder_chain(docked, ["A", "C"])
+
+    backbone_only = docked[np.isin(docked.atom_name, backbones.BACKBONE_ATOMS)]
+    spliced = backbones.splice_binder(target, backbone_only, binder)
+
+    side_chain_atoms = {"CG", "OD1", "OD2"}
+    assert side_chain_atoms <= set(spliced.atom_name), "side chains were not restored"
+    assert backbones.chain_length(spliced, binder) == backbones.chain_length(
+        backbone_only, binder
+    )
+
+
+def test_splicing_a_structure_with_no_binder_is_an_error(target):
+    with pytest.raises(ValueError, match="no chain"):
+        backbones.splice_binder(target, target, "B")
