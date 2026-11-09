@@ -21,6 +21,7 @@ import pytest
 NOTEBOOKS = Path(__file__).resolve().parents[1] / "notebooks"
 COLAB = NOTEBOOKS / "05_rfdiffusion_binder.ipynb"
 KAGGLE = NOTEBOOKS / "05_kaggle_rfdiffusion_binder.ipynb"
+BOLTZ = NOTEBOOKS / "07_boltz2_cofolding.ipynb"
 
 #: Line prefixes that are IPython syntax rather than Python, and so must be
 #: stripped before the cell can be parsed.
@@ -59,7 +60,7 @@ def kaggle():
 # --- both notebooks -------------------------------------------------------
 
 
-@pytest.mark.parametrize("path", [COLAB, KAGGLE], ids=["colab", "kaggle"])
+@pytest.mark.parametrize("path", [COLAB, KAGGLE, BOLTZ], ids=["colab", "kaggle", "boltz"])
 def test_notebook_is_valid_nbformat_and_asks_for_a_gpu(path):
     notebook = _load(path)
     assert notebook["nbformat"] == 4
@@ -69,7 +70,7 @@ def test_notebook_is_valid_nbformat_and_asks_for_a_gpu(path):
     )
 
 
-@pytest.mark.parametrize("path", [COLAB, KAGGLE], ids=["colab", "kaggle"])
+@pytest.mark.parametrize("path", [COLAB, KAGGLE, BOLTZ], ids=["colab", "kaggle", "boltz"])
 def test_every_code_cell_parses(path):
     """The check that protects a GPU session from a typo."""
     notebook = _load(path)
@@ -180,3 +181,50 @@ def test_the_kaggle_archive_carries_the_run_log(kaggle):
     source = _all_code(kaggle)
     assert "run_log.tsv" in source
     assert "make_archive" in source
+
+
+# --- cofolding notebook ---------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def boltz():
+    return _load(BOLTZ)
+
+
+def test_the_cofolding_notebook_refuses_python_313(boltz):
+    """On 3.13, pip resolves boltz to 2.0.3 rather than 2.2.1.
+
+    Verified by resolving the dependency for each version. The notebook must
+    stop rather than silently predict with a different model than the one the
+    methods document names.
+    """
+    source = _all_code(boltz)
+    assert "sys.version_info[:2] >= (3, 13)" in source
+    assert "2026.04" in source
+
+
+def test_the_cofolding_notebook_pins_the_boltz_version(boltz):
+    source = _all_code(boltz)
+    assert 'BOLTZ_VERSION = "2.2.1"' in source
+    assert "boltz=={BOLTZ_VERSION}" in source
+    assert "wanted boltz" in source, "the installed version must be checked"
+
+
+def test_the_cofolding_notebook_verifies_input_checksums(boltz):
+    source = _all_code(boltz)
+    assert "sha256" in source
+    assert "checksum mismatch" in source
+
+
+def test_the_cofolding_notebook_computes_the_msa_once(boltz):
+    """42 predictions share one HLA sequence; its alignment is computed once."""
+    source = _all_code(boltz)
+    assert "hla_groove.a3m" in source
+    assert "reusing" in source
+
+
+def test_the_cofolding_notebook_is_rerunnable(boltz):
+    """A dropped session must cost only the prediction in flight."""
+    source = _all_code(boltz)
+    assert "def done(job)" in source
+    assert "already on Drive" in source

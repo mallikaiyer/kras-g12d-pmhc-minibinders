@@ -7,13 +7,14 @@
 PYTHON ?= python
 SCRIPTS := scripts
 
-.PHONY: help install fetch survey rotamers targets relax stage backbones nim nim-key nim-smoke rotamer-sensitivity sequences test lint clean
+.PHONY: help install fetch survey rotamers targets relax stage backbones nim nim-key nim-smoke rotamer-sensitivity sequences select stage-cofolding test lint clean
 
 # Where scripts/05a_stage_to_drive.py puts the target for Colab to read, and
 # where scripts/05_ingest_backbones.py reads the results back from. Override on
 # the command line if Drive is mounted elsewhere:
 #     make stage DRIVE_DIR="/path/to/My Drive/kras_pmhc_stage05"
 DRIVE_DIR ?= $(HOME)/Library/CloudStorage/GoogleDrive-you@example.com/My Drive/kras_pmhc_stage05
+DRIVE_DIR_07 ?= $(HOME)/Library/CloudStorage/GoogleDrive-you@example.com/My Drive/kras_pmhc_stage07
 
 help:
 	@echo "Setup"
@@ -38,6 +39,10 @@ help:
 	@echo ""
 	@echo "Sequence design (stage 06)"
 	@echo "  make sequences ProteinMPNN sequences for the designs that passed -> data/sequences/"
+	@echo "  make select    drop low-complexity and lone-cysteine sequences -> SELECTED.tsv"
+	@echo ""
+	@echo "Cofolding (stage 07; needs a GPU, so the middle step runs in Colab)"
+	@echo "  make stage-cofolding  write Boltz-2 inputs to Drive for notebooks/07_*.ipynb"
 	@echo ""
 	@echo "Quality"
 	@echo "  make test      run the test suite"
@@ -85,6 +90,16 @@ NIM_N ?= 10
 
 # Quantifies how far the stage-05 gate depends on the constructed Asp6 rotamer.
 # Writes results/rotamer_sensitivity.tsv; changes no decision.
+# Best N sequences per design, three predictions each (g12d / wt / apo).
+PER_DESIGN ?= 2
+
+stage-cofolding:
+	$(PYTHON) $(SCRIPTS)/07a_stage_cofolding.py --drive-dir "$(DRIVE_DIR_07)" \
+	  --per-design $(PER_DESIGN) --force
+
+select:
+	$(PYTHON) $(SCRIPTS)/06b_select_sequences.py
+
 sequences:
 	$(PYTHON) $(SCRIPTS)/06_mpnn_sequences.py
 
