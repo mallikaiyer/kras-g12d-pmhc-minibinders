@@ -41,6 +41,7 @@ from biotite.structure import AtomArray
 #: Hosted inference endpoints. A self-hosted NIM exposes the same paths.
 GENERATE_URL = "https://health.api.nvidia.com/v1/biology/ipd/rfdiffusion/generate"
 PROTEINMPNN_URL = "https://health.api.nvidia.com/v1/biology/ipd/proteinmpnn/predict"
+BOLTZ2_URL = "https://health.api.nvidia.com/v1/biology/mit/boltz2/predict"
 #: NVCF hands back a request id for long-running jobs; results are polled here.
 STATUS_URL = "https://health.api.nvidia.com/v1/status/{req_id}"
 
