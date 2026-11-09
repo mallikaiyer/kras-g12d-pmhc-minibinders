@@ -192,7 +192,9 @@ hold:
 2. **Asp6 is an interface residue** — support, rim or core under the Levy
    classification;
 3. **Asp6 loses ≥10 Å² of SASA** on binding; and
-4. the **peptide carries ≥10%** of the target-side interface ΔSASA.
+4. the **peptide carries ≥10%** of the target-side interface ΔSASA; and
+5. the binder is **compact** — radius of gyration ≤1.7× that of a globular protein
+   of the same length.
 
 Criteria 3 and 4 encode the project's two leading objectives separately, and in the
 right order. Criterion 3 is absolute and stands for *mutation specificity*: does the
@@ -229,6 +231,29 @@ Asp6 burial is near the 10 Å² threshold, the reported engagement is a property
 modelled rotamer as much as of the design. Two designs are exceptions and are the more
 credible for it — `nim3_6` classifies as `core` under both rotamers (75.8 and 74.5 Å²),
 and `nim2_5` is `rim` canonically but `core` under the alternative (52.6 → 61.4 Å²).
+
+*Criterion 5 was added after generation, having been missing.* 11 of the 20 designs
+that passed criteria 1–4 turned out to be **single extended α-helices** — 88–106 Å end
+to end, Rg 2.5–2.8× globular — which satisfy every interface test (a helix laid across
+the groove buries plenty of surface) while being unfoldable as standalone proteins.
+ProteinMPNN confirms it independently: asked to design sequences for them it returns
+low-complexity poly-alanine (runs of 38–53 Ala in 70 residues, `seq_recovery` 0.014),
+which is what it does when a backbone has no core to pack.
+
+This traces directly to a recorded deviation. The RFdiffusion authors recommend
+`noise_scale=0.5` for interfaces *because it improves designability*, and the hosted
+NIM endpoint exposes no noise field, so all 50 designs were sampled at the default.
+The cost of that substitution is visible here and nowhere else.
+
+The 50 designs separate cleanly — 1.13–1.62 against 2.51–2.77, with nothing between —
+so the threshold is insensitive; anything from 1.7 to 2.4 selects the same set. It is
+placed at 1.7 so that `nim1_6` (1.62, ends 26 Å apart, a folded-back topology) is kept,
+since end-to-end distance is the physical discriminator and Rg ratio only a proxy for it.
+
+Nine designs pass all five criteria. Note what this costs: `nim3_6`, the only design of
+the 50 to bury Asp6 as `core`, is a 99.8 Å extended helix and is excluded. Its burial
+was real but came from a helix lying in the groove rather than a folded binder engaging
+it.
 
 A failure mode was predicted before generation and is confirmed: the binder tends to
 land on the α1/α2 helix tops, a far larger hydrophobic surface than a ten-residue

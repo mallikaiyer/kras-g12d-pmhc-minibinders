@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from biotite.structure import AtomArray
 from biotite.structure.io.pdb import PDBFile
 
 from kras_pmhc import backbones, interface
@@ -303,13 +304,29 @@ def test_a_clash_is_judged_on_the_backbone_not_on_side_chains():
 
 
 def test_a_design_needing_a_repack_is_not_disqualified_for_it():
-    """A side chain in the way is a repacking job, not a failed design."""
+    """A side chain in the way is a repacking job, not a failed design.
+
+    needs_repack must never be the reason a design is excluded: when such a
+    design fails, at least one of the five real criteria must also have failed.
+    """
     rows = [r for r in _manifest_rows() if r["needs_repack"] == "True"]
     if not rows:
         pytest.skip("no design needs repacking")
-    assert any(r["passes_gate"] == "True" for r in rows) or all(
-        r["asp6_class"] == "surface" or float(r["peptide_share"]) < 0.20 for r in rows
-    ), "repacking alone must not be what excluded these designs"
+
+    for row in rows:
+        if row["passes_gate"] == "True":
+            continue
+        criteria = {
+            "clash": row["clashes"] == "True",
+            "asp6 class": row["asp6_class"] not in interface.INTERFACE_CLASSES,
+            "asp6 burial": float(row["asp6_sasa_loss"]) < 10.0,
+            "peptide share": float(row["peptide_share"]) < 0.10,
+            "compactness": float(row["compactness"]) > 1.7,
+        }
+        assert any(criteria.values()), (
+            f"{row['backbone_id']} was excluded but fails no criterion, so "
+            "needs_repack is what excluded it"
+        )
 
 
 def test_every_interface_is_mutual():
@@ -323,13 +340,16 @@ def test_every_interface_is_mutual():
         )
 
 
-def test_the_gate_column_agrees_with_its_four_criteria():
+def test_the_gate_column_agrees_with_its_five_criteria():
     """The recorded verdict must be reproducible from the recorded evidence.
 
-    Four criteria. Asp6 must be at the interface *and* lose at least 10 A2 of
+    Five criteria. Asp6 must be at the interface *and* lose at least 10 A2 of
     SASA - the absolute measure of mutation specificity - while peptide share
     is a weak veto at 10% against HLA-dominated interfaces. The share-only rule
     this replaced rejected designs that buried more of Asp6 than ones it kept.
+
+    Compactness is the fifth: a single extended helix laid across the groove
+    satisfies every interface criterion while being unfoldable as a protein.
     """
     for row in _manifest_rows():
         expected = (
@@ -337,6 +357,7 @@ def test_the_gate_column_agrees_with_its_four_criteria():
             and row["asp6_class"] in interface.INTERFACE_CLASSES
             and float(row["asp6_sasa_loss"]) >= 10.0
             and float(row["peptide_share"]) >= 0.10
+            and float(row["compactness"]) <= 1.7
         )
         assert (row["passes_gate"] == "True") is expected, row["backbone_id"]
 
@@ -399,3 +420,50 @@ def test_splicing_restores_the_target_side_chains(target, synthetic):
 def test_splicing_a_structure_with_no_binder_is_an_error(target):
     with pytest.raises(ValueError, match="no chain"):
         backbones.splice_binder(target, target, "B")
+
+
+# --- compactness ----------------------------------------------------------
+
+
+def test_a_compact_chain_scores_near_one(target):
+    """A real folded domain is close to the globular reference."""
+    fragment = _fragment(target, *FRAGMENT_RANGE)
+    value = backbones.compactness(target + fragment, "B")
+    assert 0.7 < value < 1.8, f"a real domain fragment scored {value}"
+
+
+def test_an_extended_helix_is_far_from_compact():
+    """The failure this criterion exists to catch.
+
+    A straight line of CA atoms at 1.5 A rise - the geometry of an ideal
+    alpha-helix - must land well above the gate's 1.7 threshold, since 70 such
+    residues span about 100 A.
+    """
+    n = 70
+    helix = AtomArray(n)
+    for i in range(n):
+        helix.chain_id[i] = "B"
+        helix.res_id[i] = i + 1
+        helix.res_name[i] = "GLY"
+        helix.atom_name[i] = "CA"
+        helix.element[i] = "C"
+    helix.coord = np.zeros((n, 3))
+    helix.coord[:, 2] = np.arange(n) * 1.5
+
+    value = backbones.compactness(helix, "B")
+    assert value > 2.0, f"an extended helix scored {value}, which would pass"
+
+
+def test_radius_of_gyration_needs_the_chain_to_exist(target):
+    with pytest.raises(ValueError, match="no CA atoms"):
+        backbones.radius_of_gyration(target, "Z")
+
+
+def test_compactness_is_recorded_and_gates_the_manifest():
+    for row in _manifest_rows():
+        value = float(row["compactness"])
+        assert value > 0
+        if value > 1.7:
+            assert row["passes_gate"] == "False", (
+                f"{row['backbone_id']}: Rg {value}x globular yet passes the gate"
+            )

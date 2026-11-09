@@ -205,6 +205,44 @@ def secondary_structure_fraction(array: AtomArray, chain_id: str) -> dict[str, f
     }
 
 
+#: Empirical radius of gyration of a compact globular protein, Rg = A * N^B
+#: angstroms for N residues. Used only to put Rg on a scale that is comparable
+#: across binder lengths - the absolute constant matters far less than the ratio.
+RG_PREFACTOR_A = 2.2
+RG_EXPONENT = 0.38
+
+
+def radius_of_gyration(array: AtomArray, chain_id: str) -> float:
+    """Radius of gyration of one chain, over its CA atoms."""
+    ca = array.coord[(array.chain_id == chain_id) & (array.atom_name == "CA")]
+    if len(ca) == 0:
+        raise ValueError(f"chain {chain_id} has no CA atoms")
+    return float(np.sqrt(((ca - ca.mean(axis=0)) ** 2).sum(axis=1).mean()))
+
+
+def compactness(array: AtomArray, chain_id: str) -> float:
+    """Radius of gyration relative to a compact globule of the same length.
+
+    1.0 is globular; a single extended alpha-helix comes out around 2.5, since
+    70 residues of helix span roughly 100 angstroms.
+
+    This exists because RFdiffusion at default noise produces many designs that
+    are a single long helix. Those satisfy every interface criterion - a helix
+    laid across the groove buries plenty of surface - while being unfoldable as
+    standalone proteins, and ProteinMPNN answers them with low-complexity
+    poly-alanine because there is no core to pack. The authors recommend
+    noise_scale 0.5 for interfaces precisely because it improves designability,
+    and the hosted API this project fell back to cannot set it.
+    """
+    ca_count = int(
+        np.count_nonzero((array.chain_id == chain_id) & (array.atom_name == "CA"))
+    )
+    if ca_count == 0:
+        raise ValueError(f"chain {chain_id} has no CA atoms")
+    ideal = RG_PREFACTOR_A * ca_count**RG_EXPONENT
+    return radius_of_gyration(array, chain_id) / ideal
+
+
 def chain_length(array: AtomArray, chain_id: str) -> int:
     """Number of residues in one chain."""
     chain = array[array.chain_id == chain_id]

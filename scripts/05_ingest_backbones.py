@@ -64,6 +64,19 @@ GATE_ASP6_CLASSES = interface.INTERFACE_CLASSES
 #: those 50 designs run ... 15.7, 14.7, 11.2, then 6.7, 4.3, 0.
 GATE_MIN_ASP6_SASA_LOSS = 10.0
 
+#: and the binder must be compact enough to be a foldable protein rather than a
+#: single long helix laid across the groove. Measured as Rg relative to a compact
+#: globule of the same length: the 50 designs split cleanly into 1.13-1.62 and
+#: 2.51-2.77 with nothing between, so this threshold is insensitive - anything
+#: from 1.7 to 2.4 selects the same designs. 11 of the 20 that passed the
+#: interface criteria were single extended helices, 88-106 A end to end.
+#:
+#: Set at the top of that gap rather than the bottom so that nim1_6 (1.62) is
+#: kept: its ends are 26 A apart, which is a folded-back topology, not a helix
+#: spanning 100 A. End-to-end distance is the physical discriminator here and
+#: the ratio is the convenient proxy, so the proxy is set not to override it.
+GATE_MAX_COMPACTNESS = 1.7
+
 #: and the peptide must carry at least this share of target-side interface area.
 #: Lowered from 0.20 to 0.10 when the criterion above was added: this is the
 #: proxy for *peptide-dependent* binding, and its job is to exclude designs
@@ -106,7 +119,7 @@ MANIFEST_FIELDS = (
     "peptide_interface_area", "hla_interface_area", "peptide_share",
     "n_core_binder", "n_support_binder", "n_rim_binder",
     "n_interface_binder", "n_interface_target", "buried_interface_area",
-    "helix", "strand", "coil",
+    "helix", "strand", "coil", "radius_of_gyration", "compactness",
     "min_dist_to_target", "min_dist_to_target_backbone",
     "min_dist_to_carboxylate", "clashes", "needs_repack", "passes_gate",
 )
@@ -189,11 +202,14 @@ def score(
     # interface areas are computed from interpenetrating atoms - so it fails the
     # gate whatever the Levy classification says. A side-chain overlap does not
     # disqualify it: that side chain is free to move and will be repacked.
+    compactness = backbones.compactness(array, binder)
+
     passes = (
         not clashes
         and asp6.klass in GATE_ASP6_CLASSES
         and asp6.sasa_loss >= GATE_MIN_ASP6_SASA_LOSS
         and peptide_share >= GATE_MIN_PEPTIDE_SHARE
+        and compactness <= GATE_MAX_COMPACTNESS
     )
 
     row = {
@@ -229,6 +245,8 @@ def score(
         "helix": sse["helix"],
         "strand": sse["strand"],
         "coil": sse["coil"],
+        "radius_of_gyration": round(backbones.radius_of_gyration(array, binder), 2),
+        "compactness": round(compactness, 3),
         "min_dist_to_target": round(closest, 2),
         "min_dist_to_target_backbone": round(closest_backbone, 2),
         "clashes": clashes,
@@ -380,8 +398,13 @@ def main() -> int:
 
     print(f"\ngate: {len(passing)}/{len(rows)} engage Asp6")
     print(f"  Asp6 is support/rim/core, loses >= {GATE_MIN_ASP6_SASA_LOSS:.0f} A2 "
-          f"of SASA, and the peptide carries >= {GATE_MIN_PEPTIDE_SHARE:.0%} "
-          "of target-side interface area")
+          f"of SASA, the peptide carries >= {GATE_MIN_PEPTIDE_SHARE:.0%} of "
+          f"target-side interface area, and Rg <= {GATE_MAX_COMPACTNESS} x globular")
+    extended = [row for row in rows if row["compactness"] > GATE_MAX_COMPACTNESS]
+    if extended:
+        print(f"  {len(extended)} excluded as extended rather than folded "
+              f"(single long helices): "
+              + ", ".join(row["backbone_id"] for row in extended))
     repack = [row for row in rows if row["needs_repack"]]
     if clashing:
         print(f"  {len(clashing)} rejected: backbone inside the target "
