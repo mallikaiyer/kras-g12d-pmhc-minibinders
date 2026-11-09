@@ -170,5 +170,18 @@ HLA_A1101_HEAVY_CHAIN = (
 #: Residues of the heavy chain covered by the design target crop (alpha1/alpha2).
 HLA_DESIGN_TARGET_RESIDUES = 180
 
-#: beta-2 microglobulin, 99 aa. Still outstanding from the challenge page.
-B2M_SEQUENCE: str | None = None
+# beta-2 microglobulin, from the same challenge page, supplied 9 Nov 2026.
+# Verified against 7OW3 chain B: residues 1-99 of the structure match this
+# exactly, 99 of 99. The structure additionally carries an initiator Met
+# numbered 0, so the challenge specifies the *mature* chain and the crystal the
+# expressed one - a distinction the stage-11 construct description has to get
+# right. beta-2m is not part of the design target: stage 03 cropped it away
+# along with alpha3, because the binder never sees it.
+B2M_SEQUENCE = (
+    "IQRTPKIQVYSRHPAENGKSNFLNCYVSGFHPSDIEVDLLKNGERIEKVEHSDLSFSKDWSFYLLYYTEFTPTEKDEYA"
+    "CRVNHVTLSQPKIVKWDRDM"
+)
+
+#: The initiator Met present in the crystal structures but not in the mature
+#: sequence above, numbered residue 0 in 7OW3 chain B.
+B2M_STRUCTURE_HAS_INITIATOR_MET = True

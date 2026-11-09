@@ -53,3 +53,28 @@ def test_the_peptide_is_the_g12d_decamer(relaxed_target):
         ProteinSequence.convert_letter_3to1(name) for name in peptide.res_name[starts]
     )
     assert observed == "VVVGADGVGK"
+
+
+def test_beta_2_microglobulin_is_the_stated_length():
+    assert len(constants.B2M_SEQUENCE) == 99
+
+
+@pytest.mark.needs_data
+def test_beta_2_microglobulin_matches_the_crystal_structure(ow3):
+    """Residues 1-99 of 7OW3 chain B, past the initiator Met at residue 0.
+
+    The offset is the point of this test: the challenge gives the mature chain
+    and the crystal an expressed one, and stage 11 must describe the construct
+    the challenge asked about rather than the one that was crystallised.
+    """
+    chain_b = ow3[(ow3.chain_id == "B") & struc.filter_amino_acids(ow3)]
+    starts = struc.get_residue_starts(chain_b)
+    observed = "".join(
+        ProteinSequence.convert_letter_3to1(name) for name in chain_b.res_name[starts]
+    )
+    res_ids = chain_b.res_id[starts]
+
+    assert res_ids.min() == 0, "expected the initiator Met at residue 0"
+    assert observed[0] == "M"
+    assert constants.B2M_STRUCTURE_HAS_INITIATOR_MET is True
+    assert observed[1:] == constants.B2M_SEQUENCE
