@@ -1,0 +1,20 @@
+>kras_g12d_binder_01 backbone=nim2_5 mpnn_sample=2 length=66 asp6_class=rim asp6_sasa_loss=52.58A2 peptide_share=0.3962
+MSVEEALEAEMRRLREEAERLREEAEKEESEAAREALEREARAKEEAAEAIQVALDALRAEIAERE
+>kras_g12d_binder_02 backbone=nim2_11 mpnn_sample=9 length=65 asp6_class=rim asp6_sasa_loss=48.99A2 peptide_share=0.2069
+ALAEREAEAARLAAEAERARVEVLLLEKRYEAGEVSLEEVEEARRRAEELEAEAKALREEIEAER
+>kras_g12d_binder_03 backbone=nim3_18 mpnn_sample=3 length=70 asp6_class=rim asp6_sasa_loss=43.94A2 peptide_share=0.492
+SLAALAAAAQKEKEALARAEELERLFEEDEAVRESELEEELAALRELREKAAAAKKKAQEQKWKEEEAAK
+>kras_g12d_binder_04 backbone=nim1_8 mpnn_sample=4 length=74 asp6_class=rim asp6_sasa_loss=26.44A2 peptide_share=0.2877
+AEAALAQAEAEAAEARLHEEEAEFEREEARLKEEAAAAGAASGRREEAAAAAERRIAALRAGRAVGVDAAEVEE
+>kras_g12d_binder_05 backbone=nim2_17 mpnn_sample=10 length=75 asp6_class=rim asp6_sasa_loss=26.36A2 peptide_share=0.1006
+GLGLEQMRRFAAEELAADTALDEEVRARLAERLEAALEEAERLRAEGLPESEVLDRYEAAAAEARKEGLAEAAAR
+>kras_g12d_binder_06 backbone=nim1_0 mpnn_sample=5 length=64 asp6_class=rim asp6_sasa_loss=21.36A2 peptide_share=0.3425
+AIGTDEKIALLDQLEAEAAAAAQAELEAARARGELTREQEEALAARLAALSAAIAAEKAQLRKE
+>kras_g12d_binder_07 backbone=nim3_13 mpnn_sample=4 length=61 asp6_class=rim asp6_sasa_loss=11.2A2 peptide_share=0.1972
+MDLEERRRRLERRREEAERKAEELKEESEEEARRYEEEVERLDAEIDKLDLEMERARMDEE
+>kras_g12d_binder_08 backbone=nim2_5 mpnn_sample=9 length=66 asp6_class=rim asp6_sasa_loss=52.58A2 peptide_share=0.3962
+SSAEEALAEEMERLRREAEELRAEAERQESEAERRALEREAEAKREAAERIEVALRALRAEEEELE
+>kras_g12d_binder_09 backbone=nim2_11 mpnn_sample=2 length=65 asp6_class=rim asp6_sasa_loss=48.99A2 peptide_share=0.2069
+SLAALEEEAARLAEEAEQARVEVLELEKKYEAGEVSKEEVEEARKKAEELEARTKALQEKIEAEK
+>kras_g12d_binder_10 backbone=nim3_18 mpnn_sample=9 length=70 asp6_class=rim asp6_sasa_loss=43.94A2 peptide_share=0.492
+SLAAAAAAAREREEARARAEALLAEIEENEEVEESEREEELEALRALLEAERRKKREEQEERWRAEEAAR

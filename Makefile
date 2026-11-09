@@ -7,7 +7,7 @@
 PYTHON ?= python
 SCRIPTS := scripts
 
-.PHONY: help install fetch survey rotamers targets relax stage backbones nim nim-key nim-smoke rotamer-sensitivity sequences select stage-cofolding test lint clean
+.PHONY: help install fetch survey rotamers targets relax stage backbones nim nim-key nim-smoke rotamer-sensitivity sequences select stage-cofolding cofold score-cofold package test lint clean
 
 # Where scripts/05a_stage_to_drive.py puts the target for Colab to read, and
 # where scripts/05_ingest_backbones.py reads the results back from. Override on
@@ -43,6 +43,11 @@ help:
 	@echo ""
 	@echo "Cofolding (stage 07; needs a GPU, so the middle step runs in Colab)"
 	@echo "  make stage-cofolding  write Boltz-2 inputs to Drive for notebooks/07_*.ipynb"
+	@echo "  make cofold      cofold via the hosted Boltz-2 endpoint (no GPU needed)"
+	@echo "  make score-cofold  Levy + ipTM + PRODIGY on the cofolded models"
+	@echo ""
+	@echo "Submission (stage 09)"
+	@echo "  make package     rank the designs -> submission/"
 	@echo ""
 	@echo "Quality"
 	@echo "  make test      run the test suite"
@@ -92,6 +97,15 @@ NIM_N ?= 10
 # Writes results/rotamer_sensitivity.tsv; changes no decision.
 # Best N sequences per design, three predictions each (g12d / wt / apo).
 PER_DESIGN ?= 2
+
+cofold:
+	$(PYTHON) $(SCRIPTS)/07b_nim_cofolding.py --per-design $(PER_DESIGN)
+
+score-cofold:
+	$(PYTHON) $(SCRIPTS)/08_score_cofolded.py
+
+package:
+	$(PYTHON) $(SCRIPTS)/09_rank_and_package.py
 
 stage-cofolding:
 	$(PYTHON) $(SCRIPTS)/07a_stage_cofolding.py --drive-dir "$(DRIVE_DIR_07)" \
