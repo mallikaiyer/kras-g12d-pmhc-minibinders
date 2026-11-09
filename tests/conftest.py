@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from biotite.structure.io.pdb import PDBFile
 
 from kras_pmhc import structures
 
@@ -49,3 +50,20 @@ def ow6():
 def pb2():
     """G12D peptide, parent JDI TCR bound. Two copies."""
     return _load_or_skip("7PB2")
+
+
+@pytest.fixture(scope="session")
+def relaxed_target():
+    """The stage-04 design target: HLA alpha1/alpha2 as A, G12D decamer as C.
+
+    Session-scoped and shared, because several modules need it and it is the
+    structure every residue index in this project is expressed against.
+    """
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "data" / "targets_relaxed"
+        / "7ow3_L_G6D_chi1m70_chi2p120_relaxed_crop.pdb"
+    )
+    if not path.exists():
+        pytest.skip("stage 04 target not built; run scripts/04_relax_targets.py")
+    return PDBFile.read(str(path)).get_structure(model=1)

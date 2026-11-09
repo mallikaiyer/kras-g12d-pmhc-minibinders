@@ -147,3 +147,28 @@ MAX_ASA_TIEN_2013 = {
     "LEU": 201.0, "LYS": 236.0, "MET": 224.0, "PHE": 240.0, "PRO": 159.0,
     "SER": 155.0, "THR": 172.0, "TRP": 285.0, "TYR": 263.0, "VAL": 174.0,
 }
+
+
+# --- challenge target sequences -------------------------------------------
+# Taken from the Challenge 5 page, supplied by the user on 9 Nov 2026. These are
+# the sequences the submission must name as the target, independent of the
+# structures this project was built from.
+#
+# Verified rather than trusted: the first 180 residues of the heavy chain match
+# chain A of data/targets_relaxed/7ow3_L_G6D_chi1m70_chi2p120_relaxed_crop.pdb
+# exactly, 180 of 180. That confirms both the allele and - more usefully - that
+# the residue numbering used throughout stages 00-05 is the numbering the
+# challenge uses. tests/test_constants.py pins the agreement so a later edit to
+# either the sequence or the target cannot silently break it.
+HLA_A1101_HEAVY_CHAIN = (
+    "GSHSMRYFYTSVSRPGRGEPRFIAVGYVDDTQFVRFDSDAASQRMEPRAPWIEQEGPEYWDQETRNVKAQSQTDRVDLGT"
+    "LRGYYNQSEDGSHTIQIMYGCDVGPDGRFLRGYRQDAYDGKDYIALNEDLRSWTAADMAAQITKRKWEAAHAAEQQRAYL"
+    "EGRCVEWLRRYLENGKETLQRTDPPKTHMTHHPISDHEATLRCWALGFYPAEITLTWQRDGEDQTQDTELVETRPAGDGT"
+    "FQKWAAVVVPSGEEQRYTCHVQHEGLPKPLTLRWELSSQPT"
+)
+
+#: Residues of the heavy chain covered by the design target crop (alpha1/alpha2).
+HLA_DESIGN_TARGET_RESIDUES = 180
+
+#: beta-2 microglobulin, 99 aa. Still outstanding from the challenge page.
+B2M_SEQUENCE: str | None = None
