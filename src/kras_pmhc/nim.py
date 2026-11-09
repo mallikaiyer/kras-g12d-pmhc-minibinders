@@ -38,8 +38,9 @@ import biotite.structure as struc
 import numpy as np
 from biotite.structure import AtomArray
 
-#: Hosted inference endpoint. The self-hosted NIM exposes the same path.
+#: Hosted inference endpoints. A self-hosted NIM exposes the same paths.
 GENERATE_URL = "https://health.api.nvidia.com/v1/biology/ipd/rfdiffusion/generate"
+PROTEINMPNN_URL = "https://health.api.nvidia.com/v1/biology/ipd/proteinmpnn/predict"
 #: NVCF hands back a request id for long-running jobs; results are polled here.
 STATUS_URL = "https://health.api.nvidia.com/v1/status/{req_id}"
 
@@ -216,21 +217,19 @@ def _poll(req_id: str, key: str, opener) -> dict:
     raise NimError(f"request {req_id} did not finish within {POLL_TIMEOUT_S:.0f}s")
 
 
-def generate_one(
+def post(
+    url: str,
     key: str,
     payload: dict,
     opener=urllib.request.urlopen,
-) -> Design:
-    """Post one design, retrying transient failures.
+) -> dict:
+    """POST one request, retrying transient failures and polling 202s.
 
-    The seed is read back out of the payload rather than passed separately, so
-    the logged seed is necessarily the one that was sent.
+    Shared by every hosted endpoint this project calls, so the retry policy and
+    the long-job polling exist once rather than once per stage.
     """
-    seed = payload.get("random_seed")
-    started = time.monotonic()
-
     for attempt in range(1, MAX_ATTEMPTS + 1):
-        status, headers, body = _request(GENERATE_URL, key, payload, opener)
+        status, headers, body = _request(url, key, payload, opener)
 
         if status == 202:
             req_id = headers.get("nvcf-reqid") or headers.get("NVCF-REQID")
@@ -240,15 +239,7 @@ def generate_one(
             status = 200
 
         if status == 200:
-            pdb_text = body.get("output_pdb")
-            if not pdb_text:
-                raise NimError(f"200 OK but no output_pdb in response: {list(body)}")
-            return Design(
-                seed=seed,
-                pdb_text=pdb_text,
-                elapsed_s=time.monotonic() - started,
-                server_elapsed_ms=body.get("elapsed_ms"),
-            )
+            return body
 
         if status in RETRY_STATUSES and attempt < MAX_ATTEMPTS:
             wait = BACKOFF_BASE_S * (2 ** (attempt - 1))
@@ -259,6 +250,31 @@ def generate_one(
         raise NimError(f"HTTP {status}: {json.dumps(body)[:1000]}")
 
     raise NimError(f"gave up after {MAX_ATTEMPTS} attempts")
+
+
+def generate_one(
+    key: str,
+    payload: dict,
+    opener=urllib.request.urlopen,
+) -> Design:
+    """Post one RFdiffusion design.
+
+    The seed is read back out of the payload rather than passed separately, so
+    the logged seed is necessarily the one that was sent.
+    """
+    seed = payload.get("random_seed")
+    started = time.monotonic()
+    body = post(GENERATE_URL, key, payload, opener)
+
+    pdb_text = body.get("output_pdb")
+    if not pdb_text:
+        raise NimError(f"200 OK but no output_pdb in response: {list(body)}")
+    return Design(
+        seed=seed,
+        pdb_text=pdb_text,
+        elapsed_s=time.monotonic() - started,
+        server_elapsed_ms=body.get("elapsed_ms"),
+    )
 
 
 def parse_contig_segments(contigs: str) -> list[tuple[str, int, int]]:
