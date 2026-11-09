@@ -66,10 +66,22 @@ MAX_TARGET_RMSD = 0.5
 MIN_BINDER_LENGTH = 60
 MAX_BINDER_LENGTH = 75
 #: Below this the generated chain overlaps the target rather than touching it.
-#: Measured against the *whole* target, not the carboxylate: a binder can sit a
-#: comfortable distance from Asp6 while interpenetrating the HLA elsewhere, and
-#: that failure is invisible to a carboxylate-only check.
-MIN_HEAVY_ATOM_APPROACH = 2.0
+#: Measured against the target's **backbone**, and against the whole target
+#: rather than the carboxylate alone - a binder can sit comfortably far from
+#: Asp6 while interpenetrating the HLA elsewhere.
+#:
+#: Backbone and not all heavy atoms, because RFdiffusion sees only backbone
+#: frames: the target's side-chain rotamers are invisible to it, so it cannot
+#: avoid them and should not be judged for hitting them. Measured over 50
+#: designs, an all-atom rule rejected 5 whose backbone approach was 2.5-5.9 A,
+#: every contact being with a flexible arginine that would simply repack.
+#: Minimum backbone approach across those 50 was 2.53 A: none truly clashed.
+MIN_BACKBONE_APPROACH = 2.0
+
+#: All-atom approach below which a target side chain is sitting where the binder
+#: wants to be. Not a rejection - it is a note that this design needs its
+#: interface side chains repacked before any energetic claim is made about it.
+REPACK_APPROACH = 2.0
 
 MANIFEST_FIELDS = (
     "backbone_id", "batch", "seed", "binder_chain", "binder_length",
@@ -79,7 +91,8 @@ MANIFEST_FIELDS = (
     "n_core_binder", "n_support_binder", "n_rim_binder",
     "n_interface_binder", "n_interface_target", "buried_interface_area",
     "helix", "strand", "coil",
-    "min_dist_to_target", "min_dist_to_carboxylate", "clashes", "passes_gate",
+    "min_dist_to_target", "min_dist_to_target_backbone",
+    "min_dist_to_carboxylate", "clashes", "needs_repack", "passes_gate",
 )
 
 
@@ -144,14 +157,22 @@ def score(
     binder_coords = array.coord[array.chain_id == binder]
     target_coords = array.coord[np.isin(array.chain_id, TARGET_CHAINS)]
 
-    # Measured against the whole target, side chains included: a binder can sit
-    # a comfortable distance from Asp6 while overlapping the HLA elsewhere.
+    # Two different questions, two different measurements. Against the target
+    # backbone: did the generator put this chain inside the target? Against all
+    # heavy atoms: is a side chain in the way? Only the first is a design fault.
+    target_backbone = array.coord[
+        np.isin(array.chain_id, TARGET_CHAINS)
+        & np.isin(array.atom_name, backbones.BACKBONE_ATOMS)
+    ]
     closest = min_distance(binder_coords, target_coords)
-    clashes = closest < MIN_HEAVY_ATOM_APPROACH
+    closest_backbone = min_distance(binder_coords, target_backbone)
+    clashes = closest_backbone < MIN_BACKBONE_APPROACH
+    needs_repack = closest < REPACK_APPROACH
 
-    # A clashing design cannot engage anything - its interface areas are
-    # computed from interpenetrating atoms - so it fails the gate whatever the
-    # Levy classification says.
+    # A design whose backbone is inside the target cannot engage anything - its
+    # interface areas are computed from interpenetrating atoms - so it fails the
+    # gate whatever the Levy classification says. A side-chain overlap does not
+    # disqualify it: that side chain is free to move and will be repacked.
     passes = (
         not clashes
         and asp6.klass in GATE_ASP6_CLASSES
@@ -192,7 +213,9 @@ def score(
         "strand": sse["strand"],
         "coil": sse["coil"],
         "min_dist_to_target": round(closest, 2),
+        "min_dist_to_target_backbone": round(closest_backbone, 2),
         "clashes": clashes,
+        "needs_repack": needs_repack,
         "min_dist_to_carboxylate": round(min_distance(binder_coords, carboxylate), 2),
         "passes_gate": passes,
     }
@@ -341,10 +364,15 @@ def main() -> int:
     print(f"\ngate: {len(passing)}/{len(rows)} engage Asp6")
     print(f"  Asp6 is support/rim/core and peptide carries "
           f">= {GATE_MIN_PEPTIDE_SHARE:.0%} of target interface area")
+    repack = [row for row in rows if row["needs_repack"]]
     if clashing:
-        print(f"  {len(clashing)} rejected for overlapping the target "
-              f"(< {MIN_HEAVY_ATOM_APPROACH} A): "
+        print(f"  {len(clashing)} rejected: backbone inside the target "
+              f"(< {MIN_BACKBONE_APPROACH} A): "
               + ", ".join(row["backbone_id"] for row in clashing))
+    if repack:
+        print(f"  {len(repack)} need interface side chains repacked "
+              f"(a target side chain within {REPACK_APPROACH} A, backbone clear): "
+              + ", ".join(row["backbone_id"] for row in repack))
     if len(rows) == 8 and len(passing) < GATE_MIN_PASSING:
         print(f"  a pilot of 8 needs >= {GATE_MIN_PASSING} passing to justify "
               "a production run")

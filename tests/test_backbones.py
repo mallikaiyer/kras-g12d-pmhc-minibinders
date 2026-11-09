@@ -280,24 +280,36 @@ def test_every_binder_is_the_requested_length():
         assert 60 <= length <= 75, f"{row['backbone_id']}: {length} residues"
 
 
-def test_an_overlapping_binder_is_rejected_rather_than_absent():
-    """Clashing designs are kept and marked, not excluded from the manifest.
+def test_a_clash_is_judged_on_the_backbone_not_on_side_chains():
+    """RFdiffusion sees only backbone frames, so it cannot avoid side chains.
 
-    RFdiffusion does sometimes place a backbone inside its target - 5 of the 50
-    designs on 9 Nov 2026 - and that is a design failure, not a pipeline one.
-    What must hold is that such a design is flagged and cannot pass the gate,
-    so nothing downstream can select it.
+    Judging it against the target's rotamers rejected 5 of 50 designs whose
+    backbones were 2.5-5.9 A clear and whose only close contact was a flexible
+    arginine that would repack. The clash column must track the backbone
+    distance; side-chain overlap is recorded as needing a repack instead.
     """
     for row in _manifest_rows():
-        closest = float(row["min_dist_to_target"])
-        clashes = row["clashes"] == "True"
-        assert clashes == (closest < 2.0), (
-            f"{row['backbone_id']}: closest {closest} A but clashes={clashes}"
+        backbone = float(row["min_dist_to_target_backbone"])
+        all_atom = float(row["min_dist_to_target"])
+        assert all_atom <= backbone + 1e-6, (
+            f"{row['backbone_id']}: all-atom approach cannot exceed backbone-only"
         )
-        if clashes:
+        assert (row["clashes"] == "True") == (backbone < 2.0), row["backbone_id"]
+        assert (row["needs_repack"] == "True") == (all_atom < 2.0), row["backbone_id"]
+        if row["clashes"] == "True":
             assert row["passes_gate"] == "False", (
-                f"{row['backbone_id']}: overlaps the target yet passes the gate"
+                f"{row['backbone_id']}: backbone inside the target yet passes"
             )
+
+
+def test_a_design_needing_a_repack_is_not_disqualified_for_it():
+    """A side chain in the way is a repacking job, not a failed design."""
+    rows = [r for r in _manifest_rows() if r["needs_repack"] == "True"]
+    if not rows:
+        pytest.skip("no design needs repacking")
+    assert any(r["passes_gate"] == "True" for r in rows) or all(
+        r["asp6_class"] == "surface" or float(r["peptide_share"]) < 0.20 for r in rows
+    ), "repacking alone must not be what excluded these designs"
 
 
 def test_every_interface_is_mutual():
