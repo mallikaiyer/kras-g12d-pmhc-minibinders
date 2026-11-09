@@ -7,7 +7,7 @@
 PYTHON ?= python
 SCRIPTS := scripts
 
-.PHONY: help install fetch survey rotamers targets relax stage backbones nim nim-key nim-smoke test lint clean
+.PHONY: help install fetch survey rotamers targets relax stage backbones nim nim-key nim-smoke rotamer-sensitivity test lint clean
 
 # Where scripts/05a_stage_to_drive.py puts the target for Colab to read, and
 # where scripts/05_ingest_backbones.py reads the results back from. Override on
@@ -30,6 +30,7 @@ help:
 	@echo "  make stage     copy the target to Drive for notebooks/05_rfdiffusion_binder.ipynb"
 	@echo "  make backbones ingest generated backbones -> data/backbones/"
 	@echo "                 (add RELABEL=1 for raw output from the Kaggle route)"
+	@echo "  make rotamer-sensitivity  re-score designs against an alternative Asp6 rotamer"
 	@echo "  make nim-key   store the NVIDIA API key (hidden prompt)"
 	@echo "  make nim-smoke one design via the NVIDIA NIM API (proves the request)"
 	@echo "  make nim       10 designs via the NVIDIA NIM API (one call each)"
@@ -77,6 +78,11 @@ backbones:
 #     make backbones DRIVE_DIR=data/nim_stage05
 NIM_DIR ?= data/nim_stage05
 NIM_N ?= 10
+
+# Quantifies how far the stage-05 gate depends on the constructed Asp6 rotamer.
+# Writes results/rotamer_sensitivity.tsv; changes no decision.
+rotamer-sensitivity:
+	$(PYTHON) $(SCRIPTS)/05c_rotamer_sensitivity.py
 
 nim-key:
 	$(PYTHON) $(SCRIPTS)/nim_set_key.py

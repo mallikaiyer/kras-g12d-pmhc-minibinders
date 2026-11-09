@@ -209,6 +209,27 @@ one that buries it. Nine excluded designs had more peptide contact than the weak
 admitted one. The 10 Å² threshold is set at a gap in the observed distribution:
 losses run …15.7, 14.7, 11.2, then 6.7, 4.3, 0.
 
+*Stated shortcoming — the gate partly measures a modelling choice.* Asp6 does not
+exist in any crystal structure of this complex at the conformer used here: 7OW3
+carries wild-type Gly at peptide position 6, so stage 02 scanned the Asp rotamers,
+stage 03 built χ1 = −70°, χ2 = +120°, and stage 04 minimised it. Criterion 3 above is
+therefore measured against a side chain this project constructed.
+
+`scripts/05c_rotamer_sensitivity.py` quantifies the dependence by re-scoring all 50
+designs against an independently built and relaxed alternative (χ1 = −180°, χ2 = 0°),
+changing nothing else. **Nine of 50 verdicts move** — three lost, six gained — and
+individual swings are large: `nim1_6` goes from 36.8 Å² of Asp6 burial to 4.0 Å², and
+`nim3_19` from 0.8 Å² to 21.5 Å². Seventeen designs pass under both rotamers; the
+canonical set is 20 and the alternative 23. Full table in
+`results/rotamer_sensitivity.tsv`.
+
+Selection uses the canonical rotamer, deliberately and not because the alternative was
+unavailable. The consequence is stated rather than engineered away: for designs whose
+Asp6 burial is near the 10 Å² threshold, the reported engagement is a property of the
+modelled rotamer as much as of the design. Two designs are exceptions and are the more
+credible for it — `nim3_6` classifies as `core` under both rotamers (75.8 and 74.5 Å²),
+and `nim2_5` is `rim` canonically but `core` under the alternative (52.6 → 61.4 Å²).
+
 A failure mode was predicted before generation and is confirmed: the binder tends to
 land on the α1/α2 helix tops, a far larger hydrophobic surface than a ten-residue
 peptide in a groove. 18 of 50 designs leave Asp6 fully `surface`. Remedies available

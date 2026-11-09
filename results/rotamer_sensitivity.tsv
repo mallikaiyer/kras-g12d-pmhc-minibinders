@@ -1,0 +1,51 @@
+backbone_id	canonical_class	canonical_sasa_loss	canonical_share	canonical_passes	alternative_class	alternative_sasa_loss	alternative_share	alternative_passes	min_sasa_loss	verdict_change
+nim0_0	rim	4.32	0.0817	False	rim	5.0	0.0884	False	4.32	
+nim1_0	rim	21.36	0.3425	True	rim	28.18	0.3674	True	21.36	
+nim1_1	rim	14.66	0.3743	True	rim	37.59	0.5667	True	14.66	
+nim1_2	surface	0.0	0.0164	False	surface	0.0	0.0164	False	0.0	
+nim1_3	rim	20.6	0.1592	True	rim	10.72	0.1134	True	10.72	
+nim1_4	surface	0.0	0.0284	False	surface	0.0	0.0269	False	0.0	
+nim1_5	rim	20.12	0.1992	True	rim	47.86	0.3286	True	20.12	
+nim1_6	rim	36.82	0.1192	True	rim	4.02	0.0349	False	4.02	lost
+nim1_7	surface	0.0	0.0	False	surface	0.0	0.0	False	0.0	
+nim1_8	rim	26.44	0.2877	True	rim	31.3	0.3066	True	26.44	
+nim2_0	surface	0.0	0.0	False	surface	0.0	0.0	False	0.0	
+nim2_1	rim	22.39	0.078	False	rim	31.46	0.1061	True	22.39	gained
+nim2_10	rim	24.52	0.2934	True	rim	32.62	0.3591	True	24.52	
+nim2_11	rim	48.99	0.2069	True	rim	15.92	0.1095	True	15.92	
+nim2_12	rim	8.83	0.044	False	rim	2.07	0.0187	False	2.07	
+nim2_13	surface	0.0	0.0612	False	surface	0.0	0.0617	False	0.0	
+nim2_14	surface	0.0	0.0	False	surface	0.0	0.0	False	0.0	
+nim2_15	rim	9.79	0.0721	False	rim	13.22	0.0981	False	9.79	
+nim2_16	surface	0.0	0.0	False	surface	0.0	0.0	False	0.0	
+nim2_17	rim	26.36	0.1006	True	rim	15.92	0.0847	False	15.92	lost
+nim2_18	rim	19.71	0.0818	False	rim	25.79	0.1019	True	19.71	gained
+nim2_19	surface	0.0	0.0	False	surface	0.0	0.0	False	0.0	
+nim2_2	rim	16.84	0.1114	True	rim	8.2	0.0574	False	8.2	lost
+nim2_3	rim	10.75	0.054	False	rim	17.54	0.0865	False	10.75	
+nim2_4	rim	6.69	0.4119	False	rim	28.09	0.5046	True	6.69	gained
+nim2_5	rim	52.58	0.3962	True	core	61.36	0.4315	True	52.58	
+nim2_6	rim	20.97	0.1906	True	rim	18.27	0.1729	True	18.27	
+nim2_7	rim	22.13	0.2111	True	rim	37.49	0.3096	True	22.13	
+nim2_8	surface	0.0	0.0838	False	surface	0.0	0.0818	False	0.0	
+nim2_9	rim	3.49	0.0374	False	rim	4.4	0.0415	False	3.49	
+nim3_0	rim	38.58	0.4663	True	rim	45.49	0.5133	True	38.58	
+nim3_1	rim	15.71	0.0867	False	rim	28.39	0.1121	True	15.71	gained
+nim3_10	surface	0.0	0.0	False	surface	0.0	0.0	False	0.0	
+nim3_11	surface	0.0	0.0151	False	surface	0.0	0.0151	False	0.0	
+nim3_12	rim	6.99	0.0886	False	rim	24.06	0.2009	True	6.99	gained
+nim3_13	rim	11.2	0.1972	True	rim	22.81	0.2686	True	11.2	
+nim3_14	surface	0.0	0.0	False	surface	0.0	0.0	False	0.0	
+nim3_15	rim	3.0	0.0113	False	surface	0.0	0.0	False	0.0	
+nim3_16	surface	0.0	0.0	False	surface	0.0	0.0	False	0.0	
+nim3_17	surface	0.0	0.0	False	rim	4.8	0.0318	False	0.0	
+nim3_18	rim	43.94	0.492	True	rim	52.82	0.5776	True	43.94	
+nim3_19	rim	0.81	0.0087	False	rim	21.45	0.1817	True	0.81	gained
+nim3_2	rim	27.79	0.2966	True	rim	52.72	0.3724	True	27.79	
+nim3_3	rim	41.05	0.38	True	rim	39.76	0.3815	True	39.76	
+nim3_4	surface	0.0	0.0525	False	surface	0.0	0.054	False	0.0	
+nim3_5	surface	0.0	0.0	False	rim	0.4	0.0019	False	0.0	
+nim3_6	core	75.77	0.2742	True	core	74.46	0.2736	True	74.46	
+nim3_7	surface	0.0	0.0206	False	surface	0.0	0.0218	False	0.0	
+nim3_8	rim	41.43	0.1661	True	rim	53.55	0.1992	True	41.43	
+nim3_9	surface	0.0	0.0118	False	surface	0.0	0.0118	False	0.0	
