@@ -7,7 +7,7 @@
 PYTHON ?= python
 SCRIPTS := scripts
 
-.PHONY: help install fetch survey rotamers targets relax stage backbones test lint clean
+.PHONY: help install fetch survey rotamers targets relax stage backbones nim nim-smoke test lint clean
 
 # Where scripts/05a_stage_to_drive.py puts the target for Colab to read, and
 # where scripts/05_ingest_backbones.py reads the results back from. Override on
@@ -29,6 +29,8 @@ help:
 	@echo "Generation (stage 05; needs a GPU, so the middle step runs in Colab)"
 	@echo "  make stage     copy the target to Drive for notebooks/05_rfdiffusion_binder.ipynb"
 	@echo "  make backbones ingest generated backbones from Drive -> data/backbones/"
+	@echo "  make nim-smoke one design via the NVIDIA NIM API (proves the request)"
+	@echo "  make nim       pilot of 8 via the NVIDIA NIM API (no GPU needed)"
 	@echo ""
 	@echo "Quality"
 	@echo "  make test      run the test suite"
@@ -59,6 +61,19 @@ stage:
 backbones:
 	$(PYTHON) $(SCRIPTS)/05_ingest_backbones.py --drive-dir "$(DRIVE_DIR)"
 
+# Fallback transport for stage 05 when no GPU is available. Needs an API key in
+# .nim_api_key (gitignored). NIM_DIR is where backbones and run_log.tsv land, in
+# the same layout the Colab notebook wrote, so `backbones` can ingest it:
+#     make backbones DRIVE_DIR=data/nim_stage05
+NIM_DIR ?= data/nim_stage05
+NIM_N ?= 8
+
+nim-smoke:
+	$(PYTHON) $(SCRIPTS)/05b_nim_generate.py --n 1 --out-dir "$(NIM_DIR)"
+
+nim:
+	$(PYTHON) $(SCRIPTS)/05b_nim_generate.py --n $(NIM_N) --out-dir "$(NIM_DIR)"
+
 test:
 	$(PYTHON) -m pytest
 
@@ -70,3 +85,4 @@ lint:
 clean:
 	rm -rf results/survey
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
+

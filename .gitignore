@@ -31,3 +31,6 @@ docs/notes.md
 results/**/backbones/
 results/**/designs/
 results/**/trajectories/
+
+# NVIDIA NIM API key (stage 05 fallback transport). Never committed.
+.nim_api_key
