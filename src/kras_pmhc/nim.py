@@ -24,7 +24,10 @@ Reference: https://docs.nvidia.com/nim/bionemo/rfdiffusion/latest/endpoints.html
 
 from __future__ import annotations
 
+import getpass
 import json
+import os
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -74,21 +77,49 @@ class Design:
     server_elapsed_ms: int | None
 
 
-def read_api_key(path: Path) -> str:
-    """Read the key from a file rather than take it as an argument.
+#: Every key issued by build.nvidia.com carries this prefix.
+KEY_PREFIX = "nvapi-"
 
-    A key passed on the command line lands in the shell history and in the
-    process table; a key in a gitignored file does neither.
-    """
-    if not path.is_file():
-        raise NimError(
-            f"no API key at {path}. Copy the key from build.nvidia.com, then:\n"
-            f"  pbpaste > {path} && chmod 600 {path}"
-        )
-    key = path.read_text().strip()
-    if not key.startswith("nvapi-"):
-        raise NimError(f"{path} does not look like an NVIDIA key (expected nvapi-...)")
+
+def _validate_key(key: str, source: str) -> str:
+    if not key.startswith(KEY_PREFIX):
+        raise NimError(f"{source} does not look like an NVIDIA key (expected nvapi-...)")
     return key
+
+
+def prompt_for_key(path: Path) -> str:
+    """Ask for the key at the terminal and save it, readable only by its owner.
+
+    ``getpass`` is used rather than ``input`` so the key is never echoed, and
+    the file is created with mode 0600 from the outset rather than chmodded
+    afterwards - a key must not be briefly world-readable.
+    """
+    key = _validate_key(getpass.getpass("NVIDIA API key (nvapi-...): ").strip(), "input")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with open(handle, "w") as out:
+        out.write(key + "\n")
+    print(f"saved to {path} (mode 600, gitignored)")
+    return key
+
+
+def read_api_key(path: Path, allow_prompt: bool = True) -> str:
+    """Read the key from a file, or ask for it if there is a terminal to ask at.
+
+    A key passed as a command-line argument lands in the shell history and in
+    the process table; a key in a gitignored file or typed at a hidden prompt
+    does neither.
+    """
+    if path.is_file():
+        return _validate_key(path.read_text().strip(), str(path))
+    if allow_prompt and sys.stdin.isatty():
+        return prompt_for_key(path)
+    raise NimError(
+        f"no API key at {path}, and no terminal to ask at. Either run\n"
+        f"  python scripts/05b_nim_generate.py --set-key\n"
+        f"from a terminal, or copy the key from build.nvidia.com and run\n"
+        f"  pbpaste > {path} && chmod 600 {path}"
+    )
 
 
 def atom_lines(pdb_text: str) -> str:

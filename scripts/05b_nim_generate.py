@@ -124,7 +124,16 @@ def main() -> int:
         "--until",
         help="ISO UTC cutoff, e.g. 2026-11-09T22:00:00; overrides --n",
     )
+    parser.add_argument(
+        "--set-key",
+        action="store_true",
+        help="prompt for the API key, save it, and exit without generating",
+    )
     args = parser.parse_args()
+
+    if args.set_key:
+        nim.prompt_for_key(args.key_file.expanduser())
+        return 0
 
     target_path = RELAXED / args.target
     if not target_path.is_file():

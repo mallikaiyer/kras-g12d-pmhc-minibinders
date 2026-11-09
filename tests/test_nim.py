@@ -53,8 +53,34 @@ def _opener(*responses):
 
 
 def test_a_missing_key_file_says_how_to_make_one(tmp_path):
-    with pytest.raises(nim.NimError, match="pbpaste"):
-        nim.read_api_key(tmp_path / "absent")
+    """With no file and no terminal, the error must name both routes."""
+    with pytest.raises(nim.NimError, match="--set-key"):
+        nim.read_api_key(tmp_path / "absent", allow_prompt=False)
+
+
+def test_a_missing_key_is_prompted_for_when_there_is_a_terminal(tmp_path, monkeypatch):
+    path = tmp_path / "key"
+    monkeypatch.setattr(nim.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(nim.getpass, "getpass", lambda _: "  nvapi-typed\n")
+
+    assert nim.read_api_key(path) == "nvapi-typed"
+    assert path.read_text().strip() == "nvapi-typed"
+
+
+def test_a_prompted_key_is_not_world_readable(tmp_path, monkeypatch):
+    """A key file must never be readable by anyone but its owner."""
+    path = tmp_path / "key"
+    monkeypatch.setattr(nim.getpass, "getpass", lambda _: "nvapi-typed")
+    nim.prompt_for_key(path)
+    assert path.stat().st_mode & 0o077 == 0
+
+
+def test_a_mistyped_key_is_rejected_at_the_prompt(tmp_path, monkeypatch):
+    path = tmp_path / "key"
+    monkeypatch.setattr(nim.getpass, "getpass", lambda _: "sk-wrong-provider")
+    with pytest.raises(nim.NimError, match="nvapi-"):
+        nim.prompt_for_key(path)
+    assert not path.exists(), "a rejected key must not be written"
 
 
 def test_a_key_of_the_wrong_shape_is_rejected(tmp_path):
