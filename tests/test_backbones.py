@@ -280,10 +280,24 @@ def test_every_binder_is_the_requested_length():
         assert 60 <= length <= 75, f"{row['backbone_id']}: {length} residues"
 
 
-def test_no_binder_overlaps_the_target():
+def test_an_overlapping_binder_is_rejected_rather_than_absent():
+    """Clashing designs are kept and marked, not excluded from the manifest.
+
+    RFdiffusion does sometimes place a backbone inside its target - 5 of the 50
+    designs on 9 Nov 2026 - and that is a design failure, not a pipeline one.
+    What must hold is that such a design is flagged and cannot pass the gate,
+    so nothing downstream can select it.
+    """
     for row in _manifest_rows():
         closest = float(row["min_dist_to_target"])
-        assert closest >= 2.0, f"{row['backbone_id']}: closest {closest} A"
+        clashes = row["clashes"] == "True"
+        assert clashes == (closest < 2.0), (
+            f"{row['backbone_id']}: closest {closest} A but clashes={clashes}"
+        )
+        if clashes:
+            assert row["passes_gate"] == "False", (
+                f"{row['backbone_id']}: overlaps the target yet passes the gate"
+            )
 
 
 def test_every_interface_is_mutual():
@@ -297,11 +311,17 @@ def test_every_interface_is_mutual():
         )
 
 
-def test_the_gate_column_agrees_with_its_two_criteria():
-    """The recorded verdict must be reproducible from the recorded evidence."""
+def test_the_gate_column_agrees_with_its_three_criteria():
+    """The recorded verdict must be reproducible from the recorded evidence.
+
+    Three criteria, not two: a design that overlaps the target is excluded
+    regardless of its Levy classification, because its interface areas were
+    computed from interpenetrating atoms and mean nothing.
+    """
     for row in _manifest_rows():
         expected = (
-            row["asp6_class"] in interface.INTERFACE_CLASSES
+            row["clashes"] == "False"
+            and row["asp6_class"] in interface.INTERFACE_CLASSES
             and float(row["peptide_share"]) >= 0.20
         )
         assert (row["passes_gate"] == "True") is expected, row["backbone_id"]

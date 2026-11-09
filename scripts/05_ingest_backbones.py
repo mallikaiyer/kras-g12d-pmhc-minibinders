@@ -79,7 +79,7 @@ MANIFEST_FIELDS = (
     "n_core_binder", "n_support_binder", "n_rim_binder",
     "n_interface_binder", "n_interface_target", "buried_interface_area",
     "helix", "strand", "coil",
-    "min_dist_to_target", "min_dist_to_carboxylate", "passes_gate",
+    "min_dist_to_target", "min_dist_to_carboxylate", "clashes", "passes_gate",
 )
 
 
@@ -136,10 +136,6 @@ def score(
     peptide_share = peptide_area / target_area if target_area > 0 else 0.0
 
     binder_records = [r for r in records if r.chain_id == binder]
-    passes = (
-        asp6.klass in GATE_ASP6_CLASSES
-        and peptide_share >= GATE_MIN_PEPTIDE_SHARE
-    )
 
     sse = backbones.secondary_structure_fraction(array, binder)
     carboxylate = structures.select_atoms(
@@ -147,6 +143,20 @@ def score(
     )
     binder_coords = array.coord[array.chain_id == binder]
     target_coords = array.coord[np.isin(array.chain_id, TARGET_CHAINS)]
+
+    # Measured against the whole target, side chains included: a binder can sit
+    # a comfortable distance from Asp6 while overlapping the HLA elsewhere.
+    closest = min_distance(binder_coords, target_coords)
+    clashes = closest < MIN_HEAVY_ATOM_APPROACH
+
+    # A clashing design cannot engage anything - its interface areas are
+    # computed from interpenetrating atoms - so it fails the gate whatever the
+    # Levy classification says.
+    passes = (
+        not clashes
+        and asp6.klass in GATE_ASP6_CLASSES
+        and peptide_share >= GATE_MIN_PEPTIDE_SHARE
+    )
 
     row = {
         "backbone_id": backbone_id,
@@ -181,7 +191,8 @@ def score(
         "helix": sse["helix"],
         "strand": sse["strand"],
         "coil": sse["coil"],
-        "min_dist_to_target": round(min_distance(binder_coords, target_coords), 2),
+        "min_dist_to_target": round(closest, 2),
+        "clashes": clashes,
         "min_dist_to_carboxylate": round(min_distance(binder_coords, carboxylate), 2),
         "passes_gate": passes,
     }
@@ -202,7 +213,14 @@ def write_interface_table(backbone_id: str, records: list) -> None:
 
 
 def validate(rows: list[dict]) -> list[str]:
-    """Hard checks. These are bugs or wrong inputs, not design failures."""
+    """Hard checks: bugs or wrong inputs, not design failures.
+
+    A steric clash is deliberately *not* here. RFdiffusion sometimes places a
+    backbone inside its target, and that is a property of the design, not of
+    this pipeline - at 50 designs several did. Clashing designs are recorded in
+    the manifest, excluded from the gate, and reported, but they do not stop
+    the run; aborting on one would discard the other 49.
+    """
     problems = []
     for row in rows:
         name = row["backbone_id"]
@@ -216,11 +234,6 @@ def validate(rows: list[dict]) -> list[str]:
             problems.append(
                 f"{name}: binder length {row['binder_length']} outside "
                 f"{MIN_BINDER_LENGTH}-{MAX_BINDER_LENGTH}"
-            )
-        if row["min_dist_to_target"] < MIN_HEAVY_ATOM_APPROACH:
-            problems.append(
-                f"{name}: closest approach to the target "
-                f"{row['min_dist_to_target']} A - the binder overlaps it"
             )
         # Occlusion is mutual, so an interface cannot exist on one side only.
         # When it appears to, the generated chain is inside the target rather
@@ -323,10 +336,18 @@ def main() -> int:
 
     print(f"\nwrote {manifest.relative_to(ROOT)}")
     print(f"      {INTERFACE_DIR.relative_to(ROOT)}/<backbone_id>.tsv")
-    print(f"\npilot gate: {len(passing)}/{len(rows)} engage Asp6 "
-          f"(need >= {GATE_MIN_PASSING} of 8 to proceed)")
+    clashing = [row for row in rows if row["clashes"]]
+
+    print(f"\ngate: {len(passing)}/{len(rows)} engage Asp6")
     print(f"  Asp6 is support/rim/core and peptide carries "
           f">= {GATE_MIN_PEPTIDE_SHARE:.0%} of target interface area")
+    if clashing:
+        print(f"  {len(clashing)} rejected for overlapping the target "
+              f"(< {MIN_HEAVY_ATOM_APPROACH} A): "
+              + ", ".join(row["backbone_id"] for row in clashing))
+    if len(rows) == 8 and len(passing) < GATE_MIN_PASSING:
+        print(f"  a pilot of 8 needs >= {GATE_MIN_PASSING} passing to justify "
+              "a production run")
 
     if problems:
         print("\nVALIDATION FAILED:")
