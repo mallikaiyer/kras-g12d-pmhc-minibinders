@@ -18,11 +18,11 @@ Usage:
     # smoke test: one design, prove the contigs and target are accepted
     python scripts/05b_nim_generate.py --n 1
 
-    # pilot
-    python scripts/05b_nim_generate.py --n 8
+    # the agreed run: 10 designs, one API call each
+    python scripts/05b_nim_generate.py --n 10
 
-    # production to a wall-clock cutoff
-    python scripts/05b_nim_generate.py --until 2026-11-09T22:00:00
+    # alternatively, generate until a wall-clock cutoff rather than a count
+    python scripts/05b_nim_generate.py --until 2026-11-09T20:00:00
 """
 
 from __future__ import annotations
@@ -117,7 +117,7 @@ def main() -> int:
     parser.add_argument("--target", default=DEFAULT_TARGET)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--key-file", type=Path, default=DEFAULT_KEY_FILE)
-    parser.add_argument("--n", type=int, default=8, help="designs to generate")
+    parser.add_argument("--n", type=int, default=10, help="designs to generate")
     parser.add_argument("--seed-start", type=int, default=0)
     parser.add_argument("--diffusion-steps", type=int, default=DIFFUSION_STEPS)
     parser.add_argument(

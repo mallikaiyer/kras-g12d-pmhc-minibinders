@@ -31,7 +31,7 @@ help:
 	@echo "  make backbones ingest generated backbones -> data/backbones/"
 	@echo "                 (add RELABEL=1 for raw output from the Kaggle route)"
 	@echo "  make nim-smoke one design via the NVIDIA NIM API (proves the request)"
-	@echo "  make nim       pilot of 8 via the NVIDIA NIM API (no GPU needed)"
+	@echo "  make nim       10 designs via the NVIDIA NIM API (one call each)"
 	@echo ""
 	@echo "Quality"
 	@echo "  make test      run the test suite"
@@ -75,7 +75,7 @@ backbones:
 # the same layout the Colab notebook wrote, so `backbones` can ingest it:
 #     make backbones DRIVE_DIR=data/nim_stage05
 NIM_DIR ?= data/nim_stage05
-NIM_N ?= 8
+NIM_N ?= 10
 
 nim-smoke:
 	$(PYTHON) $(SCRIPTS)/05b_nim_generate.py --n 1 --out-dir "$(NIM_DIR)"
