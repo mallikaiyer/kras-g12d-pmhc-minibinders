@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import collections
 import csv
+import shutil
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -63,16 +64,32 @@ FIELDS = (
     "prodigy_ddg", "prodigy_dg_g12d", "prodigy_dg_wt", "favours",
     "asp6_class", "asp6_sasa_loss", "peptide_share", "compactness",
     "mpnn_score", "rotamer_robust",
-    "cofold_iptm_binder_peptide", "structures", "cofold_caveat",
+    "cofold_iptm_binder_peptide", "cofold_iptm_binder_hla",
+    "structures", "cofold_caveat",
 )
 
-#: The columns the submission CSV carries, narrowest first. The challenge asks
-#: for a CSV; these are the identifying and the ranking columns, not the whole
-#: evidence table, which stays in designs.tsv.
+#: The submission CSV. The challenge requires `name`, `sequence` and
+#: `molecule_class` at minimum, with rows ordered best-first, and encourages
+#: sharing whatever metrics the entrant is comfortable publishing - so the
+#: physics-based and confidence metrics are included rather than held back.
 CSV_FIELDS = (
-    "design_name", "sequence", "rank", "prodigy_ddg", "favours",
-    "asp6_sasa_loss", "peptide_share", "binder_length", "backbone_id",
+    # required
+    "name", "sequence", "molecule_class",
+    # ranking and its basis
+    "rank", "prodigy_ddg_kcal_mol", "prodigy_dg_g12d_kcal_mol",
+    "prodigy_dg_wt_kcal_mol", "favours",
+    # confidence from cofolding
+    "iptm_binder_peptide", "iptm_binder_hla",
+    # structural engagement of the mutation, on the crystal-derived target
+    "asp6_class", "asp6_sasa_loss_a2", "peptide_share", "binder_compactness",
+    # sequence design
+    "binder_length", "mpnn_score",
+    # provenance
+    "backbone_id", "mpnn_sample", "structures_scored", "caveat",
 )
+
+#: Every design here is a single-chain de novo miniprotein.
+MOLECULE_CLASS = "protein"
 
 
 def read_tsv(path: Path, required: bool = True) -> list[dict]:
@@ -84,10 +101,61 @@ def read_tsv(path: Path, required: bool = True) -> list[dict]:
         return list(csv.DictReader(handle, delimiter="\t"))
 
 
+def bundle(rows: list[dict]) -> None:
+    """Copy the methods document and the structures behind each design.
+
+    The challenge encourages sharing structure models and methodology, and
+    notes submitted data may be published. Everything here is already in the
+    repository; this gathers the subset that belongs to the submitted designs
+    so the package stands alone.
+    """
+    shutil.copy2(ROOT / "docs" / "methods.md", OUT_DIR / "methods.md")
+
+    structures = OUT_DIR / "structures"
+    backbone_dir = structures / "backbones"
+    structures.mkdir(parents=True, exist_ok=True)
+    backbone_dir.mkdir(parents=True, exist_ok=True)
+
+    copied = 0
+    for row in rows:
+        for condition in ("g12d", "wt"):
+            job = f"{row['backbone_id']}_s{row['sample']}_{condition}"
+            # Prefer the minimised model: it is what PRODIGY scored.
+            for name in ("model_min.pdb", "model.cif"):
+                source = ROOT / "data" / "cofolding_nim" / job / name
+                if source.is_file():
+                    suffix = source.suffix
+                    target = structures / f"{row['design_id']}_{condition}{suffix}"
+                    shutil.copy2(source, target)
+                    copied += 1
+                    break
+
+    backbones_copied = set()
+    for row in rows:
+        source = ROOT / "data" / "backbones" / f"{row['backbone_id']}.pdb"
+        if source.is_file() and row["backbone_id"] not in backbones_copied:
+            shutil.copy2(source, backbone_dir / source.name)
+            backbones_copied.add(row["backbone_id"])
+
+    print(f"bundled methods.md, {copied} cofolded model(s) and "
+          f"{len(backbones_copied)} design backbone(s)")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--max-designs", type=int, default=10)
-    parser.add_argument("--per-design", type=int, default=2)
+    parser.add_argument("--max-designs", type=int, default=20)
+    parser.add_argument(
+        "--per-design",
+        type=int,
+        default=0,
+        help="cap on sequences from one backbone; 0 means no cap, which is "
+             "what ranking purely by ddG implies",
+    )
+    parser.add_argument(
+        "--no-structures",
+        action="store_true",
+        help="skip copying structures and methods into submission/",
+    )
     parser.add_argument(
         "--cofold-scores",
         type=Path,
@@ -195,7 +263,7 @@ def main() -> int:
         if rank >= args.max_designs:
             break
         design_id = entry["sequence_row"]["backbone_id"]
-        if used[design_id] >= args.per_design:
+        if args.per_design and used[design_id] >= args.per_design:
             continue
         used[design_id] += 1
         rank += 1
@@ -229,6 +297,7 @@ def main() -> int:
                 else "G12D" if entry["ddg"] < 0 else "wild type"
             ),
             "cofold_iptm_binder_peptide": g12d.get("iptm_binder_peptide", ""),
+            "cofold_iptm_binder_hla": g12d.get("iptm_binder_hla", ""),
             "structures": "minimised" if minimised else "raw prediction",
             "cofold_caveat": (
                 "Asp6 buried in cofolded model (rSASA 0.11-0.12 vs 0.59 in the "
@@ -243,23 +312,33 @@ def main() -> int:
         writer.writeheader()
         writer.writerows(rows)
 
-    # The CSV the challenge asks for. Comma-delimited, one row per design, with
-    # the identifying columns first. Confirm the header against the challenge
-    # page before submitting: the names below are this project's own.
+    # The CSV the challenge asks for: comma-delimited, best design first,
+    # `name`/`sequence`/`molecule_class` present as required.
     with (OUT_DIR / "designs.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS)
         writer.writeheader()
         for row in rows:
             writer.writerow({
-                "design_name": row["design_id"],
+                "name": row["design_id"],
                 "sequence": row["binder_sequence"],
+                "molecule_class": MOLECULE_CLASS,
                 "rank": row["rank"],
-                "prodigy_ddg": row["prodigy_ddg"],
+                "prodigy_ddg_kcal_mol": row["prodigy_ddg"],
+                "prodigy_dg_g12d_kcal_mol": row["prodigy_dg_g12d"],
+                "prodigy_dg_wt_kcal_mol": row["prodigy_dg_wt"],
                 "favours": row["favours"],
-                "asp6_sasa_loss": row["asp6_sasa_loss"],
+                "iptm_binder_peptide": row["cofold_iptm_binder_peptide"],
+                "iptm_binder_hla": row.get("cofold_iptm_binder_hla", ""),
+                "asp6_class": row["asp6_class"],
+                "asp6_sasa_loss_a2": row["asp6_sasa_loss"],
                 "peptide_share": row["peptide_share"],
+                "binder_compactness": row["compactness"],
                 "binder_length": row["binder_length"],
+                "mpnn_score": row["mpnn_score"],
                 "backbone_id": row["backbone_id"],
+                "mpnn_sample": row["sample"],
+                "structures_scored": row["structures"],
+                "caveat": row["cofold_caveat"],
             })
 
     fasta = []
@@ -297,9 +376,15 @@ The wild-type peptide is `VVVGAGGVGK`; it differs from the target at position
 
 | file | contents |
 |---|---|
-| `designs.csv` | the submission table: name, sequence, rank, ddG |
+| `designs.csv` | **the submission**: name, sequence, molecule_class,
+  ranked best-first, plus metrics |
 | `designs.fasta` | the same sequences in FASTA |
 | `designs.tsv` | the full evidence behind each row |
+| `methods.md` | how every number was produced, and what it is not |
+| `structures/` | the minimised cofolded complex for each design, against both peptides |
+| `structures/backbones/` | the RFdiffusion backbone each design was built on |
+
+All designs are single-chain de novo miniproteins: `molecule_class = protein`.
 
 ## How the ranking was made
 
@@ -338,6 +423,9 @@ Read `docs/methods.md` before treating any of this as validated. In short:
   for interfaces precisely because it improves designability.
 """
     (OUT_DIR / "README.md").write_text(readme)
+
+    if not args.no_structures:
+        bundle(rows)
 
     print(f"{len(rows)} sequences from {designs} backbones\n")
     print(f"{'rank':<5}{'design':<28}{'backbone':<10}{'Asp6 loss':>10}{'share':>7}{'mpnn':>7}")
