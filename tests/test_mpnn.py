@@ -156,3 +156,28 @@ def test_design_returns_the_raw_response_alongside_the_parse():
 def test_a_response_without_sequences_is_an_error():
     with pytest.raises(mpnn.MpnnError, match="no mfasta"):
         mpnn.design("nvapi-x", PDB, ["B"], opener=_opener({"scores": [1.0]}))
+
+
+# --- sequence liability screens -------------------------------------------
+
+
+def test_mean_hydropathy_matches_the_scale():
+    """Two residues, hand-checkable: Ile +4.5 and Arg -4.5 average to zero."""
+    assert mpnn.mean_hydropathy("IR") == pytest.approx(0.0)
+    assert mpnn.mean_hydropathy("I") == pytest.approx(4.5)
+    assert mpnn.mean_hydropathy("R") == pytest.approx(-4.5)
+
+
+def test_a_poly_alanine_sequence_is_hydrophobic():
+    """The signature of the designs stage 06 excluded."""
+    assert mpnn.mean_hydropathy("A" * 20) == pytest.approx(1.8)
+
+
+def test_a_non_standard_residue_is_an_error():
+    with pytest.raises(mpnn.MpnnError, match="non-standard"):
+        mpnn.mean_hydropathy("ACDEFX")
+
+
+def test_an_empty_sequence_is_an_error():
+    with pytest.raises(mpnn.MpnnError, match="empty"):
+        mpnn.mean_hydropathy("")

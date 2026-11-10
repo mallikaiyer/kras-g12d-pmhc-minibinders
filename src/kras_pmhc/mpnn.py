@@ -31,6 +31,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from kras_pmhc import nim
+from kras_pmhc.constants import KYTE_DOOLITTLE
 
 #: Sampling temperature. 0.1 is the conservative end of the 0.1-0.3 the NIM
 #: documentation recommends; higher values trade confidence for diversity, and
@@ -174,3 +175,18 @@ def design(
     if not mfasta:
         raise MpnnError(f"200 OK but no mfasta in response: {list(body)}")
     return parse_mfasta(mfasta, expected_length), mfasta
+
+
+def mean_hydropathy(sequence: str) -> float:
+    """Mean Kyte-Doolittle hydropathy of a sequence.
+
+    One of the three screens the competition's selection prompt applies to every
+    design. Positive is hydrophobic. Raises on a non-standard residue rather
+    than skipping it, since a silently shortened average would be wrong.
+    """
+    if not sequence:
+        raise MpnnError("empty sequence")
+    try:
+        return sum(KYTE_DOOLITTLE[a] for a in sequence) / len(sequence)
+    except KeyError as error:
+        raise MpnnError(f"non-standard residue {error} in sequence") from error

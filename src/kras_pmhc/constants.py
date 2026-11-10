@@ -185,3 +185,17 @@ B2M_SEQUENCE = (
 #: The initiator Met present in the crystal structures but not in the mature
 #: sequence above, numbered residue 0 in 7OW3 chain B.
 B2M_STRUCTURE_HAS_INITIATOR_MET = True
+
+
+# --- sequence liability screens -------------------------------------------
+# Kyte & Doolittle (1982) J Mol Biol 157:105. The competition's design-selection
+# prompt names mean Kyte-Doolittle hydropathy as one of three screens applied to
+# every design, alongside pLDDT and ipSAE, so it is reported per sequence.
+# Positive is hydrophobic; a de novo binder averaging strongly positive is a
+# solubility and aggregation risk.
+KYTE_DOOLITTLE = {
+    "A": 1.8, "R": -4.5, "N": -3.5, "D": -3.5, "C": 2.5,
+    "Q": -3.5, "E": -3.5, "G": -0.4, "H": -3.2, "I": 4.5,
+    "L": 3.8, "K": -3.9, "M": 1.9, "F": 2.8, "P": -1.6,
+    "S": -0.8, "T": -0.7, "W": -0.9, "Y": -1.3, "V": 4.2,
+}

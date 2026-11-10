@@ -43,6 +43,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from kras_pmhc import mpnn  # noqa: E402
 from kras_pmhc.constants import (  # noqa: E402
     B2M_SEQUENCE,
     HLA_A1101_HEAVY_CHAIN,
@@ -63,7 +64,7 @@ FIELDS = (
     "binder_sequence",
     "prodigy_ddg", "prodigy_dg_g12d", "prodigy_dg_wt", "favours",
     "asp6_class", "asp6_sasa_loss", "peptide_share", "compactness",
-    "mpnn_score", "rotamer_robust",
+    "mpnn_score", "rotamer_robust", "mean_kyte_doolittle", "complex_plddt",
     "cofold_iptm_binder_peptide", "cofold_iptm_binder_hla",
     "structures", "cofold_caveat",
 )
@@ -78,8 +79,10 @@ CSV_FIELDS = (
     # ranking and its basis
     "rank", "prodigy_ddg_kcal_mol", "prodigy_dg_g12d_kcal_mol",
     "prodigy_dg_wt_kcal_mol", "favours",
-    # confidence from cofolding
-    "iptm_binder_peptide", "iptm_binder_hla",
+    # confidence from cofolding, and the sequence-liability screen the
+    # competition's selection prompt names alongside pLDDT and ipSAE
+    "iptm_binder_peptide", "iptm_binder_hla", "complex_plddt",
+    "mean_kyte_doolittle",
     # structural engagement of the mutation, on the crystal-derived target
     "asp6_class", "asp6_sasa_loss_a2", "peptide_share", "binder_compactness",
     # sequence design
@@ -298,6 +301,10 @@ def main() -> int:
             ),
             "cofold_iptm_binder_peptide": g12d.get("iptm_binder_peptide", ""),
             "cofold_iptm_binder_hla": g12d.get("iptm_binder_hla", ""),
+            "complex_plddt": g12d.get("complex_plddt", ""),
+            "mean_kyte_doolittle": round(
+                mpnn.mean_hydropathy(candidate["sequence"]), 3
+            ),
             "structures": "minimised" if minimised else "raw prediction",
             "cofold_caveat": (
                 "Asp6 buried in cofolded model (rSASA 0.11-0.12 vs 0.59 in the "
@@ -329,6 +336,8 @@ def main() -> int:
                 "favours": row["favours"],
                 "iptm_binder_peptide": row["cofold_iptm_binder_peptide"],
                 "iptm_binder_hla": row.get("cofold_iptm_binder_hla", ""),
+                "complex_plddt": row["complex_plddt"],
+                "mean_kyte_doolittle": row["mean_kyte_doolittle"],
                 "asp6_class": row["asp6_class"],
                 "asp6_sasa_loss_a2": row["asp6_sasa_loss"],
                 "peptide_share": row["peptide_share"],
