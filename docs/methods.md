@@ -1,376 +1,435 @@
-# Methods — de novo minibinders against KRAS G12D on HLA-A\*11:01
+# De novo minibinders against the KRAS G12D neoepitope on HLA-A\*11:01
 
-Anthropic × Adaptyv 2026, Challenge 5. Solo entry, Track 3.
+Anthropic × Adaptyv 2026 protein design competition, Challenge 5 (peptide–MHC).
+Solo entry, Track 3.
 
-Everything below is reproducible from this repository: each stage is a numbered
-script under `scripts/`, driven by `make`, with 149 tests covering the analysis
-code. Where a step could not be scripted — the GPU notebooks — the manual
-actions are recorded in `docs/colab_runbook.md`.
+Accompanies a ranked CSV of 20 designed sequences.
 
 ---
 
-## 1. Target and premise
+## 1. The challenge
 
-| | |
-|---|---|
-| Peptide | `VVVGADGVGK` — KRAS G12D, residues 7–16 |
-| MHC | HLA-A\*11:01 heavy chain (281 aa) + β2-microglobulin (99 aa) |
-| Wild type | `VVVGAGGVGK` — differs at **position 6 only** |
+The target is the KRAS G12D neoepitope `VVVGADGVGK` — residues 7–16 of mutant
+KRAS — presented on HLA-A\*11:01 with β2-microglobulin. The off-targets are the
+wild-type peptide `VVVGAGGVGK` on the same HLA, and the same HLA with no peptide
+at all.
 
-The design problem is not "bind this surface". It is to discriminate a single
-Gly→Asp substitution in a 10-mer lying in an MHC groove, where almost all of the
-available surface is identical between target and off-target. Mutation
-specificity therefore outranks affinity throughout, and the ranking is
-lexicographic: **specificity → peptide-dependence → affinity**. A tight binder
-that also binds wild type is worthless here; a weak one that discriminates is not.
+The objectives, hardest first:
 
-Both sequences were verified rather than trusted. The heavy chain's first 180
-residues match chain A of the design target exactly (180/180), which confirms the
-allele and, more usefully, that the residue numbering used throughout this work is
-the numbering the challenge specifies. β2m matches residues 1–99 of 7OW3 chain B;
-the crystal carries an additional initiator Met at residue 0, so the challenge
-gives the mature chain. Both checks are tests (`tests/test_constants.py`).
+1. **No binding to the wild-type peptide complex.**
+2. **No binding to the peptide-free complex.**
+3. **Strong binding to the G12D complex.**
 
-## 2. Design target construction (stages 03–04)
+The difficulty is entirely in the first objective. Target and off-target differ
+by a single methylene-to-carboxylate substitution at one position of a ten-residue
+peptide, and the peptide itself contributes a minority of the solvent-accessible
+surface of the complex. Nearly every atom a binder could contact is identical
+between the two.
 
-Structures surveyed: 7OW3, 7OW4, 7OW5, 7OW6, 7PB2.
+Affinity is the *least* important objective, and over-optimising it is actively
+counterproductive. The therapeutic precedent makes this concrete: the parent JDI
+TCR against this epitope binds G12D at 63 µM with no detectable wild-type
+binding, and as it was affinity-matured through 25.8 µM and 3.0 µM to 425 nM,
+**wild-type binding appeared**. Micromolar affinity with clean discrimination
+beats nanomolar affinity without it.
 
-7OW3 is the wild-type complex and **carries Gly at peptide position 6**, so Asp6
-does not exist in any crystal structure of this complex at the conformer used
-here. It was therefore built:
+## 2. Approach and premise
 
-1. **Rotamer scan** (stage 02) over χ1 × χ2 for an Asp at position 6, scoring
-   clashes, closest approach to the groove, and side-chain SASA
-   (`results/rotamer_scan/`).
-2. **Target construction** (stage 03) at **χ1 = −70°, χ2 = +120°** — a
-   solvent-exposed rotamer, consistent with 7OW6 where a TCR contacts Asp6
-   directly.
-3. **Protonation and minimisation** (stage 04), then cropping to heavy-chain
-   residues **1–180** (α1/α2) plus the peptide. α3 and β2m are removed because
-   the binder never sees them.
+### The discriminating feature
 
-Final target: `data/targets_relaxed/7ow3_L_G6D_chi1m70_chi2p120_relaxed_crop.pdb`,
-chain A = groove, chain C = peptide. An alternative rotamer
-(χ1 = −180°, χ2 = 0°) was built and relaxed identically, and is used in §7 to
-quantify how much the results depend on this choice.
+In the receptor-bound state, peptide position 6 behaves very differently in the
+two complexes: the aspartate of G12D forms a hydrogen-bond and electrostatic
+network, where wild-type glycine offers nothing. The discriminator available to
+a designed binder is therefore **aspartate versus nothing** — not two competing
+chemistries, but presence against absence.
 
-## 3. Interface definition — Levy (2010) rSASA
+This is unusually favourable for negative design. A pocket built to present a
+cation and backbone donors sized for a carboxylate is, against the wild-type
+peptide, a desolvated and unsatisfied cation — *destabilising*, not merely
+unrewarded. The same structural feature serves objectives 1 and 3 simultaneously.
+Objective 2 follows for free: the peptide-free groove has nothing for such a
+pocket to grab.
 
-Used **everywhere** interface residues are needed. No distance cutoff is used
-anywhere in this work to define an interface; closest-approach distances are
-reported descriptively and decide nothing.
+### Conformational selection on the open state
 
-Per `kras_pmhc.interface`:
+Crystallography of this system shows the peptide centre adopting two
+arrangements. In the free complex the mid-peptide backbone is **open**, with
+position 6 projecting out of the groove; in the receptor-bound complex it is
+**closed**, with position 6 turned down into the groove and engaged by the HLA
+F-pocket.
 
-1. Per-residue SASA computed twice — in the complex, and with partner atoms
-   removed at identical coordinates (Shrake–Rupley, 500 points, 1.4 Å probe).
-2. rSASA = SASA ÷ the **Tien et al. (2013) theoretical** maximum ASA. The
-   theoretical rather than empirical maxima: the empirical values are drawn from
-   observed structures and so already reflect burial, which is the quantity
-   being measured.
-3. ΔrSASA = rSASA_monomer − rSASA_complex, with a residue counted as changed on
-   binding only if its absolute SASA loss exceeds 0.1 Å².
-4. Classification at rSASA 0.25 → interior / surface / support / rim / core.
-   **Interface = support + rim + core; buried interface = core + support.**
+This work designs against the **open** backbone, and the mechanistic claim is
+**conformational selection rather than induced fit**: the open state need only be
+*populated* in the free ensemble, not dominant. A binder that engages it shifts
+the equilibrium toward it. The cost is a penalty on apparent affinity of
+−RT ln *p* — about 1.4 kcal/mol if the open state is 10% populated, 2.7 kcal/mol
+at 1%.
 
-Applied over two *groups* of chains rather than chain-by-chain. On a three-chain
-system the literal per-chain reading counts the HLA↔peptide interface, which
-swamps the binder signal; single-chain groups reproduce the per-chain case
-exactly.
+Four observations support the choice:
 
-**Validation against a known answer.** On 7OW6: peptide vs HLA puts Asp6 in
-`core` (rSASA 0.572 → 0.089, 93.1 Å² lost), agreeing with an independent
-side-chain SASA measurement of 7.4 Å²; peptide vs TCR puts the same residue in
-`rim` (0.572 → 0.488, 16.2 Å² lost). The TCR therefore reads the aspartate
-without desolvating it — recovering Poole et al.'s indirect-electrostatic
-mechanism by a method that uses no distances at all. Both are asserted in
-`tests/test_interface.py`.
+1. **The disorder in the free G12D structure is evidence for the premise, not
+   against it.** No density is modelled at peptide residues 5–6 in any of the
+   four copies of the free G12D complex. Conformational selection requires a
+   populated alternative state, and disorder is what that looks like in a
+   diffraction experiment.
+2. **The open state is an observation, not a model.** Two independent copies of
+   the free wild-type complex agree to within 0.5 Å, and a wild-type
+   receptor-bound control shows the open-to-closed flip is driven by receptor
+   binding rather than by the mutation.
+3. **Reachability was measured rather than assumed.** On that backbone, every
+   clash-free aspartate rotamer leaves the side chain solvent-exposed at
+   ≥ 38 Å².
+4. **Negative design is built in**, as above.
 
-## 4. Backbone generation (stage 05)
+### Known headwinds
 
-**RFdiffusion** via NVIDIA's hosted endpoint
-(`biology/ipd/rfdiffusion/generate`), 50 designs, ~16 s each.
+Stated at the outset, because they bound what this approach can achieve.
+
+The groove rewards burial: only the G12D peptide forms a stabilising network
+with the HLA F-pocket in the closed state, so the closed conformation is *more*
+stabilised for the mutant than for wild type — the design is working against the
+mutant's own preference. And the entropic cost is paid twice: ordering a mobile
+region, in a non-preferred conformation. For scale, the natural TCR paid
+TΔS° = −8.13 kcal/mol across ~990 Å² of buried surface; a 60–75 residue
+miniprotein buries roughly 800–900 Å², so there is margin but not much.
+
+The expected outcome of this approach is a binder with a defensible mechanism and
+a genuine chance at objective 1 — not a high-probability binder.
+
+## 3. Methods
+
+### 3.1 Structural basis
+
+Five crystal structures of this epitope system were surveyed: the free wild-type
+and free G12D complexes, two receptor-bound complexes (wild type and G12D with
+the same engineered TCR), and a third bound complex with the parent TCR. The free
+wild-type complex provided the open backbone used throughout; its peptide
+position 6 is wild-type glycine, so the aspartate had to be modelled.
+
+### 3.2 Aspartate rotamer construction
+
+Position 6 was mutated glycine→aspartate and its side chain built by a scan over
+χ1 × χ2, scoring each rotamer for steric clash, closest approach to the groove,
+and side-chain solvent accessibility. **χ1 = −70°, χ2 = +120°** was selected: a
+clash-free, solvent-exposed rotamer consistent with the receptor-bound structure
+in which the aspartate is contacted directly.
+
+An independent alternative, **χ1 = −180°, χ2 = 0°**, was built and carried
+through identically for the sensitivity analysis in §3.6.
+
+### 3.3 Target preparation
+
+Hydrogens were added at pH 7.4 and the structure energy-minimised with **amber14**
+and **GBn2 implicit solvent**, backbone heavy atoms restrained harmonically at
+**10 kcal/mol/Å²** and all side chains free. No dynamics were run. The restraint
+preserves the experimentally observed backbone — the central claim of the
+approach — while letting the environment respond to the new aspartate.
+
+The design target was then cropped to **heavy-chain residues 1–180** (the α1/α2
+groove) **plus the peptide**. α3 and β2-microglobulin were removed: a binder
+engaging the peptide and the groove rim does not contact them.
+
+### 3.4 Interface definition
+
+Every interface in this work is identified by the **Levy (2010) relative-SASA
+classification**. No distance cutoff is used anywhere to define an interface;
+closest-approach distances are reported descriptively and decide nothing.
+
+Per-residue SASA is computed twice — in the complex, and with partner atoms
+removed at identical coordinates (Shrake–Rupley, 500 points, 1.4 Å probe — then
+divided by the **Tien et al. (2013) theoretical** maximum accessible area. The
+theoretical rather than empirical maxima: empirical values are derived from
+observed structures and so already embed burial, which is the quantity being
+measured. A residue counts as changed on binding only if its absolute SASA loss
+exceeds 0.1 Å². Classification at relative SASA 0.25 gives interior, surface,
+support, rim and core, with **interface = support + rim + core**.
+
+The classification is applied over two *groups* of chains rather than
+chain-by-chain, because on a three-chain system the per-chain reading counts the
+HLA–peptide interface and swamps the binder signal.
+
+**Validation against a known answer.** On the G12D receptor-bound structure, the
+peptide-versus-HLA grouping places Asp6 in **core** (relative SASA 0.572 → 0.089,
+93.1 Å² lost), agreeing with an independent side-chain SASA measurement. The
+peptide-versus-TCR grouping places the same residue in **rim** (0.572 → 0.488,
+16.2 Å² lost): the receptor reads the aspartate without desolvating it. That
+recovers the published indirect-electrostatic mechanism for this system by a
+method that uses no distances at all.
+
+### 3.5 Backbone generation
+
+**RFdiffusion**, via a hosted inference endpoint, 50 designs.
 
 | Parameter | Value |
 |---|---|
-| `contigs` | `A1-180/0 C1-10/0 60-75` |
-| `hotspot_res` | `C5, C6, C7` |
-| `diffusion_steps` | 50 |
-| noise scale | **endpoint default — not settable** |
+| Contigs | `A1-180/0 C1-10/0 60-75` (target held fixed, 60–75 residue binder) |
+| Hotspots | peptide positions **5, 6, 7** |
+| Diffusion steps | 50 |
+| Noise scale | endpoint default — **not settable** |
 
-Hotspots are centred on the mutation; C5/C6/C7 are Ala/**Asp**/Gly, so Asp6 is
-the only side chain of substance in the set. Three hotspots is within the 3–6 the
-authors recommend.
+Hotspots are centred on the mutation. Positions 5/6/7 are Ala/**Asp**/Gly, so the
+aspartate is the only side chain of substance in the set, and three hotspots sits
+within the three to six the method's authors recommend.
 
-**Deviation, with consequences in §7:** the authors recommend `noise_scale = 0.5`
-for protein–protein interfaces *because it improves designability*. The hosted
-endpoint exposes no noise field. GPU routes that would have allowed it were
-attempted first and failed for environmental reasons (documented in
-`docs/colab_runbook.md`); this was the route that worked.
+The noise scale is a known deviation with consequences in §4: the authors
+recommend 0.5 for protein–protein interfaces *because it improves designability*,
+and the endpoint used exposes no such field, so all 50 designs were sampled at
+the default.
 
-Three properties of the output had to be established empirically, because
-assuming them produced plausible-looking but meaningless numbers:
+Three properties of the generator output were established empirically, because
+assuming them produced plausible-looking but meaningless interface numbers:
 
-* **The binder comes first**, not last as the contig string implies. Resolved per
-  design by superimposing the putative target on the reference: 0.09 Å for
-  binder-first against 21.70 Å for target-first.
-* **Output is backbone-only** (N, CA, C, O) for the target as well as the binder,
-  so Asp6 has no carboxylate. Since the target is held rigid, its side chains are
-  known exactly — the stage-04 reference — and are reattached by splicing the
-  generated chain onto it.
-* **Output is recentred**, by ~81 Å RMS. Undone by superimposing on the target
-  backbone. The shape check uses N/CA/C only, because the carbonyl O is rebuilt
-  from idealised geometry (0.37 Å rms, 2.4 Å max, against ~0.1 Å for N/CA/C).
+- **The generated chain is written first**, not last as the contig string
+  implies. Resolved per design by superimposing the putative target onto the
+  reference: 0.09 Å under the correct assignment against 21.70 Å under the
+  wrong one.
+- **Output carries backbone atoms only** (N, Cα, C, O) for the target as well as
+  the binder, so the aspartate has no carboxylate. Because the target is held
+  rigid during generation its side chains are known exactly, and were restored
+  by splicing the generated chain onto the prepared target.
+- **Output is recentred**, by ~81 Å RMS, undone by superposition on the target
+  backbone. Shape agreement is assessed over N/Cα/C only: the carbonyl oxygen is
+  rebuilt from idealised geometry and differs by 0.37 Å RMS and up to 2.4 Å,
+  against ~0.1 Å for the frame atoms.
 
-### Design gate
+### 3.6 Design gate
 
-All five must hold. 20 of 50 designs pass criteria 1–4; **9 pass all five.**
+Five criteria, all required. **9 of 50 designs pass.**
 
-| # | Criterion | Threshold | Basis |
+| # | Criterion | Threshold | Basis for the threshold |
 |---|---|---|---|
 | 1 | No backbone clash | ≥ 2.0 Å to target backbone | below any real heavy-atom contact |
-| 2 | Asp6 is an interface residue | support/rim/core | Levy definition |
-| 3 | Asp6 buried surface | **≥ 10 Å²** | gap in the data: …15.7, 14.7, 11.2, then 6.7, 4.3, 0 |
+| 2 | Asp6 is an interface residue | support, rim or core | Levy definition |
+| 3 | Asp6 buried surface area | **≥ 10 Å²** | a gap in the observed data: …15.7, 14.7, 11.2, then 6.7, 4.3, 0 |
 | 4 | Peptide share of target-side interface | **≥ 10%** | weak veto on HLA-dominated interfaces |
-| 5 | Binder compactness | **Rg ≤ 1.7×** globular | designs split 1.13–1.62 vs 2.51–2.77, nothing between |
+| 5 | Binder compactness | **Rg ≤ 1.7 ×** globular | designs split 1.13–1.62 against 2.51–2.77, nothing between |
 
-Criterion 1 is judged on the **backbone**, not all heavy atoms: RFdiffusion
-conditions on backbone frames and cannot see the target's side-chain rotamers —
-which this work chose — so it is not judged for hitting them. An all-atom rule
-rejected 5 of 50 designs whose backbones were 2.5–5.9 Å clear and whose only
-close contacts were flexible arginines. Those designs are flagged
-`needs_repack` instead.
+Criterion 1 is judged on the target **backbone**, not all heavy atoms, because
+the generator conditions on backbone frames and cannot see the target's
+side-chain rotamers — which this work chose. An all-atom rule rejected five
+designs whose backbones were 2.5–5.9 Å clear and whose only close contacts were
+flexible arginines.
 
-Criteria 3 and 4 encode the two leading objectives *separately and in order*. An
-earlier version used criterion 4 alone at ≥ 20%, which inverted the project's own
-ranking: it rejected a design burying 41 Å² of Asp6 (17% share) while admitting
-one burying 15 Å² (37%) and one burying 6.7 Å² (41%) — the last being a
-pan-peptide binder rather than a G12D reader.
+Criteria 3 and 4 encode the two leading objectives separately and in order. An
+earlier form of the gate used criterion 4 alone at ≥ 20% and inverted that
+priority: it rejected a design burying 41 Å² of Asp6 at 17% share while admitting
+one burying 15 Å² at 37%, and one burying 6.7 Å² at 41% — the last being a
+pan-peptide binder rather than a neoepitope reader.
 
-Criterion 5 was added after generation, having been missing. 11 of the 20 designs
-passing 1–4 were **single extended α-helices**, 88–106 Å end to end, which
-satisfy every interface test — a helix laid across the groove buries plenty of
-surface — while being unfoldable as standalone proteins. ProteinMPNN confirmed it
-independently by answering them with poly-alanine.
+Criterion 5 was added after generation, having been absent. Eleven of the twenty
+designs that passed criteria 1–4 were **single extended α-helices**, 88–106 Å end
+to end, which satisfy every interface test — a helix laid across the groove
+buries plenty of surface — while being unfoldable as standalone proteins.
+Sequence design confirmed it independently by answering them with poly-alanine.
 
-## 5. Sequence design (stage 06)
+**Rotamer sensitivity.** Because the aspartate is modelled rather than observed,
+all 50 designs were re-scored against the independently built alternative
+rotamer, changing nothing else. **Nine of 50 gate verdicts move** (three lost,
+six gained; 17 pass under both). Individual swings are large: one design falls
+from 36.8 Å² of Asp6 burial to 4.0 Å². Selection uses the primary rotamer; the
+submitted CSV records which designs survive the alternative.
 
-**ProteinMPNN** via `biology/ipd/proteinmpnn/predict`. 10 sequences per surviving
-backbone at `sampling_temp = 0.1`, designing the binder chain with the HLA and
-peptide held as **fixed context** (the response confirms
-`fixed_chains=['A','C'], designed_chains=['B']`), so the model is conditioned on
-the target's sequence as well as its shape.
+### 3.7 Sequence design
 
-Two parameters were measured rather than assumed:
+**ProteinMPNN**, via a hosted endpoint. Ten sequences per surviving backbone at
+sampling temperature **0.1**, designing the binder chain with the HLA and peptide
+held as **fixed context**, so the model is conditioned on the target's sequence
+as well as its shape.
 
-* `use_soluble_model = False`. The soluble model returned 71–80% hydrophobic
-  sequences with runs of 43–53 alanines, against 43–63% for the default.
-* `random_seed` **is not honoured** — two identical requests returned different
-  sequences. Stage 06 is therefore not reproducible by re-running, so the raw
-  multi-FASTA responses are preserved verbatim (`results/sequences/`) and the
-  script will not overwrite one without `--force`.
+Two parameters were set by measurement rather than default:
 
-90 sequences. Two exclusions leave **45 across 7 of 9 backbones**:
+- The **soluble-trained model was rejected**: on a test backbone it returned
+  sequences 71–80% hydrophobic with runs of 43–53 alanines, against 43–63% for
+  the standard model.
+- The **random seed is not honoured** by the endpoint — two identical requests
+  returned different sequences — so this step is not reproducible by re-running,
+  and the raw responses were retained as the record.
 
-* **low complexity** — any residue type ≥ 40% (35 sequences). Not noise: it is
-  what ProteinMPNN returns when a backbone has no core to pack.
-* **a lone cysteine** (10 sequences, all with exactly one, so none could form a
-  disulfide). An unpaired cysteine is a liability in a protein destined for
-  expression.
+90 sequences were generated. Two filters were applied:
 
-Two backbones yield nothing usable. One of them, `nim3_0`, has the **best MPNN
-score of the entire set** (0.683) and is 87% a single residue — score alone would
-have selected the worst design.
+- **Low complexity**, any residue type at ≥ 40% of the sequence: 35 sequences.
+  This is not sampling noise but what the method returns when a backbone has no
+  core to pack.
+- **A lone cysteine**: 10 sequences, each with exactly one, so none could form an
+  intramolecular disulfide. An unpaired cysteine is a liability in a protein
+  intended for expression.
 
-## 6. Counter-screen (stages 07, 10, 08)
+**45 sequences across 7 backbones** survived. Two backbones yielded nothing
+usable; one of them produced the best sequence score of the entire set (0.683)
+while being 87% a single residue and 88% hydrophobic, so score alone would have
+selected the worst design available.
 
-**Boltz-2** cofolding via NVIDIA's hosted endpoint, every selected sequence
-against the G12D and wild-type peptides — which differ at position 6 alone, so
-the pair isolates the mutation. 87 of 90 predictions completed; the run stalled
-on a hung request, and the HTTP client sets no socket timeout.
+### 3.8 Counter-screen by cofolding
 
-Each prediction is **protonated and minimised** before scoring (stage 10).
-PRODIGY counts atomic contacts across the interface, so its answer depends on
-side-chain placement, and raw predicted side chains are the weakest part of that
-input — the minimisations moved the potential energy from about −5,000 to
-−14,400 kcal/mol, which is a measure of how far from a force-field minimum they
-started. The protocol is stage 04's, and for stage 04's reason: amber14 with GBn2
-implicit solvent, backbone heavy atoms restrained at 10 kcal/mol/Å², every side
-chain free, no dynamics. The predicted pose is what is under test and must not
-drift — observed backbone drift is ~0.09 Å — while the side chains, which are
-what PRODIGY counts, are free to settle. **Both conditions of a given sequence
-receive a byte-identical protocol**, which is the entire basis of the ΔΔG
-comparison: relaxing them differently would make them differ for reasons
-unrelated to position 6.
+**Boltz-2**, via a hosted endpoint, every surviving sequence against the G12D and
+wild-type peptides — differing at position 6 alone, so the pair isolates the
+mutation. 87 of 90 predictions completed. Single diffusion sample, 50 sampling
+steps, 3 recycling steps, step scale 1.638, **single-sequence mode with no
+multiple-sequence alignment**.
 
-Cofolding is what makes PRODIGY possible at all: stage 05 produces backbones
-only, and nothing contact-based can run on those.
+Cofolding is what makes contact-based scoring possible at all: generation
+produces backbones without side chains, and nothing contact-based can run on
+those.
 
-**One result of this screen undermines its own premise, and is reported rather
-than buried.**
+Chain identity in the output is **resolved from the sequences**, not from the
+returned chain labels: the endpoint relabels chains sequentially by submission
+order rather than preserving the identifiers it is given, and trusting those
+labels placed the binder where the peptide was expected.
 
-In the cofolded models Asp6's rSASA within the pMHC is **0.11–0.12**, against
-**0.59** in the crystal-derived target. The models bury the residue under test
-inside the groove, where 7OW6 shows a TCR contacting it directly. Six of seven
-designs consequently show zero peptide contact *by construction*. Likely causes,
-in order: single-sequence mode (no MSA) degrading the peptide register, Boltz
-modelling the decamer differently, and this work's own choice of an exposed
-rotamer in §2.
+### 3.9 Minimisation of the predicted complexes
 
-What the screen does say, and it is not encouraging: the same predictions that
-place the real HLA–peptide interface at **ipTM 0.94–0.96** place the binder at
-**0.16–0.54** against the peptide and 0.15–0.59 against the HLA. Note that the
-*overall* ipTM of 0.72–0.80 is carried almost entirely by the HLA–peptide
-interface and would badly overstate the binders if quoted as a binder score.
+Each cofolded complex was protonated and minimised before scoring, under the
+protocol of §3.3 and for the same reason: amber14 with GBn2 implicit solvent,
+backbone heavy atoms restrained at 10 kcal/mol/Å², all side chains free, no
+dynamics.
 
-G12D-minus-WT differences are ±0.07 with three of seven the wrong way round —
-what one diffusion sample of noise produces.
+Contact-based scoring depends on side-chain placement, and raw predicted side
+chains are the weakest part of that input: minimisation moved the potential
+energy from roughly −5,000 to −14,400 kcal/mol, which measures how far from a
+force-field minimum they began. Backbone drift under the restraint was ~0.09 Å,
+so the predicted pose — the thing under test — is preserved.
 
-A second chain-labelling trap was caught here: Boltz-2 **does not return the
-chain ids it is given**, relabelling them sequentially by submission order.
-Chains are resolved from their sequences, and the script refuses to proceed if
-any cannot be identified.
+**Both conditions of a given sequence received an identical protocol.** That is
+the entire basis of the differential in §3.11: relaxing them differently would
+make them differ for reasons unrelated to position 6.
 
-## 7. Ranking and selection (stage 09)
+### 3.10 Scoring
 
-Lexicographic, in the project's stated order of precedence:
+On each minimised complex:
 
-1. **Mutation specificity** — **PRODIGY ΔΔG = ΔG(G12D) − ΔG(wild type)**, both
-   from the same binder cofolded and minimised against peptides differing at
-   position 6 alone. Negative favours the mutant. This is the primary criterion
-   and what the submitted CSV is ordered by.
+- **PRODIGY** predicted binding free energy, binder against the HLA-plus-peptide
+  group, matching the Levy grouping used for every interface number here.
+- **Levy classification** of the interface, including the class and buried area
+  of peptide residue 6.
+- **Interface confidence** from the cofolding response, read **per chain pair**.
+  The overall interface-pTM of 0.72–0.80 is carried almost entirely by the real
+  HLA–peptide interface and would badly overstate the binders if quoted as a
+  binder score; the binder-to-peptide and binder-to-HLA pairs are the relevant
+  figures.
+
+Two of the three sequence and fold screens named by the competition accompany
+each design: **mean Kyte–Doolittle hydropathy**, computed directly, and **complex
+pLDDT** from the cofolding response. **ipSAE could not be computed**: the
+endpoint returns the predicted aligned error matrix as null, and ipSAE is derived
+from it.
+
+### 3.11 Ranking and selection
+
+Lexicographic, in the objectives' order of precedence:
+
+1. **Mutation specificity** — **ΔΔG = ΔG(G12D) − ΔG(wild type)**, both from the
+   same binder cofolded and minimised against peptides differing at position 6
+   alone. Negative favours the mutant. This is the primary criterion and the
+   order of the submitted CSV.
 2. **Peptide-dependent binding** — the peptide's share of the target-side
-   interface on the crystal-derived target, ≥ 10% for every design here.
-3. **Affinity** — ProteinMPNN score, as the final tie-break.
+   interface on the prepared crystal-derived target; ≥ 10% for every design
+   submitted.
+3. **Affinity** — sequence design score, as the final tie-break only.
 
-Ranking is per **sequence**, not per backbone: each sequence has its own pair of
-predictions, so each has its own ΔΔG.
+Ranking is per **sequence** rather than per backbone, since each sequence has its
+own pair of predictions and therefore its own ΔΔG.
 
-**20 sequences are submitted**, the maximum the competition accepts from this
-track. `molecule_class` is `protein` for all of them — single-chain de novo
-miniproteins of 61–75 residues, which falls in the competition's *protein
-minibinder* evaluation category (40–100 aa).
+**20 sequences are submitted**, the maximum this track accepts. All are
+single-chain de novo miniproteins of 61–75 residues — `molecule_class` =
+`protein`, falling in the competition's protein-minibinder category (40–100 aa).
 
-**Declared epitope.** Every design was generated with RFdiffusion hotspots on
-peptide positions 5, 6 and 7, and selected for burying peptide residue 6. The
-intended epitope is therefore the peptide and the groove immediately around it,
-centred on position 6 — the one residue that differs between the G12D and
-wild-type targets. This is stated so it need not be inferred from a prediction.
+**Declared epitope.** Every design was generated with hotspots on peptide
+positions 5, 6 and 7 and selected for burying peptide residue 6. The intended
+epitope is the peptide and the groove immediately around it, centred on position
+6 — the one residue that differs between the G12D and wild-type targets. It is
+stated here so that it need not be inferred.
 
-Two screens accompany each design in the CSV: **mean Kyte-Doolittle hydropathy**,
-computed locally, and **complex pLDDT** from the cofolding response. The third
-screen named by the competition, **ipSAE, could not be computed** — see §8.
+## 4. Shortcomings
 
-`--rank-by burial` reproduces an alternative ordering on Asp6 buried area
-instead of ΔΔG. The two disagree substantially, and §8 item 7 gives the reason
-to treat the ΔΔG ordering with caution.
+Listed because they bear on how the results should be read.
 
-## 8. Stated shortcomings
-
-Listed because they bear on how the results should be read, not as hedging.
-
-1. **No design is validated as a binder, computationally or experimentally.**
-   The one orthogonal check that ran placed binder interface confidence at
-   0.16–0.54 where it placed a real interface at 0.94–0.96.
-2. **The counter-screen could not test the intended interaction** (§6). There is
-   therefore **no evidence of mutation specificity** — only of geometric
-   engagement with a modelled Asp6.
-3. **Asp6 is constructed, not observed.** Re-scoring all 50 designs against an
-   independently built and relaxed alternative rotamer moves **9 of 50 gate
-   verdicts** (3 lost, 6 gained; 17 pass under both). Individual swings are
-   large: one design falls from 36.8 Å² of Asp6 burial to 4.0 Å². Selection uses
-   the canonical rotamer by decision; `rotamer_robust` in `designs.tsv` records
-   which designs survive the alternative, and `results/rotamer_sensitivity.tsv`
-   has the full table.
-4. **All backbones were sampled at default noise** (§4), which the authors'
-   own guidance says costs designability — and the extended-helix problem in §4
-   is what that cost looks like.
-5. **Every binder is helical**, 84–97% with zero strand content across all 50
-   designs. The topology search never explored sheets.
-6. **No sequence was validated by refolding.** An AF2/Boltz self-consistency
-   check of designed sequence against intended backbone was planned and not run.
-7. **The ranking criterion is, by its own evidence, noise-dominated.** All
-   sequences on one backbone share the same intended pose, so a genuine Asp6
-   specificity signal should be similar across them. It is not. The spread of
-   ΔΔG *within* a backbone is **sd 1.23 kcal/mol** while the spread *between*
-   backbone means is **sd 0.71** — a signal-to-noise ratio of 0.58. Across all
-   43 sequences with both conditions, 18 favour G12D where a coin flip predicts
-   21.5. Differences of ~1 kcal/mol between designs are therefore inside the
-   noise, and selecting the most negative values selects partly for noise. The
-   submission is ordered by ΔΔG because that is the project's stated criterion
-   and the best available; this item is the honest measure of how much weight the
-   order can carry.
-8. **No apo condition was predicted.** The competition's second-hardest stated
-   goal is no binding to the HLA with no peptide, and this submission carries no
-   evidence on it. The condition was staged for a Colab run that was not
-   performed, and the hosted endpoint stopped serving requests before it could
-   be done there.
-9. **The cofolded target is a truncation.** Heavy-chain residues 1–180 (α1/α2)
-   plus the peptide, without β2-microglobulin or α3, where the competition
-   specifies modelling the whole complex. The groove face the binder was
-   designed against is present, but the ΔG values are not directly comparable
-   with numbers computed on the full construct.
-10. **Only two of the three named screens are reported.** ipSAE could not be
-    computed: the hosted endpoint returns the PAE matrix as `null`, and ipSAE is
-    derived from PAE. A local Boltz run would supply it.
-11. **Three of 90 cofolding predictions are missing**, so two sequences lack a
-    ΔΔG and sort last.
-12. **Five designs carry `needs_repack`** — a target side chain sits within 2.0 Å
-    of binder backbone with the backbone itself clear. Minimisation will have
-    relieved some of that, but it was not verified per design.
-13. **Scale.** 50 backbones is small for de novo binder design, where hit rates
+1. **No design is validated as a binder, computationally or experimentally.** The
+   one orthogonal check that ran placed binder interface confidence at 0.16–0.54
+   where the same predictions placed a real interface at 0.94–0.96.
+2. **The counter-screen does not present the residue under test.** In the
+   cofolded models, peptide residue 6 has a relative SASA within the pMHC of
+   0.11–0.12, against 0.59 in the prepared crystal-derived target — the
+   predictions bury the aspartate inside the groove, where crystallography shows
+   a receptor contacting it directly. Six of seven designs consequently show zero
+   peptide contact *by construction*. Likely causes, in order: single-sequence
+   prediction degrading the peptide register, the predictor modelling a decamer
+   differently, and this work's own choice of a solvent-exposed rotamer. The
+   screen is therefore **uninformative about the intended interaction rather than
+   evidence against it** — and, correspondingly, there is **no positive evidence
+   of mutation specificity**, only of geometric engagement with a modelled
+   aspartate.
+3. **The ranking criterion is noise-dominated by its own evidence.** All
+   sequences on one backbone share the same intended pose, so a genuine
+   specificity signal should be similar across them. It is not: the spread of
+   ΔΔG *within* a backbone is sd 1.23 kcal/mol while the spread *between*
+   backbone means is sd 0.71, a signal-to-noise ratio of 0.58. Of 43 sequences
+   with both conditions, 18 favour G12D where a coin flip predicts 21.5.
+   Differences of ~1 kcal/mol between designs are inside the noise, and selecting
+   the most negative values selects partly for noise. The submission is ordered
+   by ΔΔG because it is the stated criterion and the best available; this is the
+   honest measure of how much weight that order carries.
+4. **The modelled aspartate is not observed.** The free complex used as the
+   design template carries wild-type glycine at position 6. Nine of 50 gate
+   verdicts move on changing the rotamer (§3.6).
+5. **The open-state population is not measured.** The approach rests on
+   conformational selection, which requires the open state to be populated enough
+   in the free ensemble. No molecular dynamics or free-energy calculation was
+   run; the structural evidence establishes only that the open conformer is
+   crystallographically observable. If the open state is rare, the −RT ln *p*
+   penalty is larger than assumed.
+6. **"The open conformation" is an ensemble average treated as a state**, and the
+   backbone used is from the wild-type complex — the free G12D peptide is, if
+   anything, more mobile.
+7. **No apo condition was predicted.** Objective 2 — no binding to the
+   peptide-free complex — carries no evidence in this submission.
+8. **The cofolded target is a truncation**: heavy-chain residues 1–180 plus
+   peptide, without β2-microglobulin or α3. The groove face the designs were
+   built against is present, but the free energies are not directly comparable
+   with values computed on the full construct.
+9. **All backbones were sampled at the generator's default noise**, which the
+   method's own guidance says costs designability; the extended-helix problem in
+   §3.6 is what that cost looks like.
+10. **Every binder is helical** — 84–97% helix with zero strand content across
+    all 50 designs. The topology search never explored sheets.
+11. **No sequence was validated by refolding.** A self-consistency check of
+    designed sequence against intended backbone was planned and not run.
+12. **One diffusion sample per prediction**, so no error bars on any
+    cofolding-derived quantity.
+13. **Only two of the three named screens are reported** (§3.10).
+14. **Three of 90 predictions are missing**, so two sequences lack a ΔΔG and sort
+    last.
+15. **Five designs had a target side chain within 2.0 Å of binder backbone**
+    before minimisation, with the backbone itself clear. Minimisation will have
+    relieved some of that; it was not re-verified per design.
+16. **Scale.** 50 backbones is small for de novo binder design, where hit rates
     are low and campaigns routinely sample thousands.
 
-## 9. Reproducibility
+## 5. References
 
-```bash
-conda activate kras-pmhc
-make fetch survey rotamers targets relax   # stages 00-04
-make nim-key                               # store the API key (hidden prompt)
-make nim                                   # stage 05: 50 backbones
-make backbones                             # scoring and the five-criterion gate
-make rotamer-sensitivity                   # how far the gate depends on the rotamer
-make sequences select                      # stage 06: ProteinMPNN, then filtering
-make cofold PER_DESIGN=10                  # stage 07: cofold against G12D and WT
-make minimise-cofold                       # stage 10: protonate + minimise
-make score-cofold-min                      # stage 08: Levy + ipTM + PRODIGY
-make package                               # stage 09 -> submission/
-make test lint
-```
-
-Every threshold quoted here is a named constant in the script that applies it,
-and every number is traceable to a file:
-
-| | |
-|---|---|
-| `data/backbones/MANIFEST.tsv` | all 50 designs, every gate input and verdict |
-| `results/interface/` | per-residue Levy tables behind each interface number |
-| `results/rotamer_sensitivity.tsv` | the same designs scored on the alternative rotamer |
-| `results/sequences/` | raw ProteinMPNN responses, verbatim |
-| `data/cofolding_nim/` | predictions, minimised models, and minimisation energies |
-| `results/cofolding/SCORES_min.tsv` | the scores the ranking is computed from |
-| `submission/` | the CSV, FASTA, evidence table, this document, and structures |
-
-The repository has 153 tests. The analysis code is covered directly; the two GPU
-notebooks are checked for syntax and for pinned parameters, because a typo in one
-only surfaces after minutes of installation on a session that may not be granted
-again.
-
-**Stages that were not fully scripted.** Backbone generation and cofolding both
-needed a GPU this machine does not have. Both ended up on hosted endpoints and
-are scripted; the Colab notebooks written for them, and the manual steps they
-would have required, are recorded in `docs/colab_runbook.md` along with the
-environment failures that made them necessary.
-
-## References
-
-- Levy, E.D. (2010) *J Mol Biol* **403**:660 — rSASA interface classification.
-- Tien, M.Z. et al. (2013) *PLoS ONE* **8**:e80635 — theoretical maximum ASA.
-- Watson, J.L. et al. (2023) *Nature* **620**:1089 — RFdiffusion.
-- Dauparas, J. et al. (2022) *Science* **378**:49 — ProteinMPNN.
-- Wohlwend, J. et al. (2024/2025) — Boltz-1 / Boltz-2.
-- Xue, L.C. et al. (2016) *Bioinformatics* **32**:3676 — PRODIGY.
-- Kyte, J. & Doolittle, R.F. (1982) *J Mol Biol* **157**:105 — hydropathy scale.
-- Eastman, P. et al. (2017) *PLoS Comput Biol* **13**:e1005659 — OpenMM.
-- Poole, A. et al. (2022) *Nat Commun* **13**:5333 — TCR recognition of KRAS
-  G12D on HLA-A\*11:01.
+- Levy, E.D. (2010) A simple definition of structural regions in proteins and its
+  use in analyzing interface evolution. *J Mol Biol* **403**:660.
+- Tien, M.Z., Meyer, A.G., Sydykova, D.K., Spielman, S.J. & Wilke, C.O. (2013)
+  Maximum allowed solvent accessibilities of residues in proteins. *PLoS ONE*
+  **8**:e80635.
+- Shrake, A. & Rupley, J.A. (1973) Environment and exposure to solvent of protein
+  atoms. Lysozyme and insulin. *J Mol Biol* **79**:351.
+- Watson, J.L. et al. (2023) De novo design of protein structure and function
+  with RFdiffusion. *Nature* **620**:1089.
+- Dauparas, J. et al. (2022) Robust deep learning–based protein sequence design
+  using ProteinMPNN. *Science* **378**:49.
+- Wohlwend, J. et al. (2024) Boltz-1: democratizing biomolecular interaction
+  modeling; and Passaro, S. et al. (2025) Boltz-2: towards accurate and efficient
+  binding affinity prediction.
+- Xue, L.C., Rodrigues, J.P., Kastritis, P.L., Bonvin, A.M. & Vangone, A. (2016)
+  PRODIGY: a web server for predicting the binding affinity of protein–protein
+  complexes. *Bioinformatics* **32**:3676.
+- Kyte, J. & Doolittle, R.F. (1982) A simple method for displaying the hydropathic
+  character of a protein. *J Mol Biol* **157**:105.
+- Eastman, P. et al. (2017) OpenMM 7: rapid development of high performance
+  algorithms for molecular dynamics. *PLoS Comput Biol* **13**:e1005659.
+- Maier, J.A. et al. (2015) ff14SB: improving the accuracy of protein side chain
+  and backbone parameters from ff99SB. *J Chem Theory Comput* **11**:3696.
+- Nguyen, H., Roe, D.R. & Simmerling, C. (2013) Improved generalized Born solvent
+  model parameters for protein simulations. *J Chem Theory Comput* **9**:2020.
+- Poole, A. et al. (2022) Therapeutic high affinity T cell receptor targeting a
+  KRAS G12D cancer neoantigen. *Nat Commun* **13**:5333.
