@@ -358,50 +358,40 @@ Listed because they bear on how the results should be read.
    evidence against it** — and, correspondingly, there is **no positive evidence
    of mutation specificity**, only of geometric engagement with a modelled
    aspartate.
-3. **The ranking criterion is noise-dominated by its own evidence.** All
-   sequences on one backbone share the same intended pose, so a genuine
-   specificity signal should be similar across them. It is not: the spread of
-   ΔΔG *within* a backbone is sd 1.23 kcal/mol while the spread *between*
-   backbone means is sd 0.71, a signal-to-noise ratio of 0.58. Of 43 sequences
-   with both conditions, 18 favour G12D where a coin flip predicts 21.5.
-   Differences of ~1 kcal/mol between designs are inside the noise, and selecting
-   the most negative values selects partly for noise. The submission is ordered
-   by ΔΔG because it is the stated criterion and the best available; this is the
-   honest measure of how much weight that order carries.
-4. **The modelled aspartate is not observed.** The free complex used as the
+3. **The modelled aspartate is not observed.** The free complex used as the
    design template carries wild-type glycine at position 6. Nine of 50 gate
    verdicts move on changing the rotamer (§3.6).
-5. **The open-state population is not measured.** The approach rests on
+4. **The open-state population is not measured.** The approach rests on
    conformational selection, which requires the open state to be populated enough
    in the free ensemble. No molecular dynamics or free-energy calculation was
    run; the structural evidence establishes only that the open conformer is
    crystallographically observable. If the open state is rare, the −RT ln *p*
    penalty is larger than assumed.
-6. **"The open conformation" is an ensemble average treated as a state**, and the
+5. **"The open conformation" is an ensemble average treated as a state**, and the
    backbone used is from the wild-type complex — the free G12D peptide is, if
    anything, more mobile.
-7. **No apo condition was predicted.** Objective 2 — no binding to the
+6. **No apo condition was predicted.** Objective 2 — no binding to the
    peptide-free complex — carries no evidence in this submission.
-8. **The cofolded target is a truncation**: heavy-chain residues 1–180 plus
+7. **The cofolded target is a truncation**: heavy-chain residues 1–180 plus
    peptide, without β2-microglobulin or α3. The groove face the designs were
    built against is present, but the free energies are not directly comparable
    with values computed on the full construct.
-9. **All backbones were sampled at the generator's default noise**, which the
+8. **All backbones were sampled at the generator's default noise**, which the
    method's own guidance says costs designability; the extended-helix problem in
    §3.6 is what that cost looks like.
-10. **Every binder is helical** — 84–97% helix with zero strand content across
-    all 50 designs. The topology search never explored sheets.
-11. **No sequence was validated by refolding.** A self-consistency check of
+9. **Every binder is helical** — 84–97% helix with zero strand content across
+   all 50 designs. The topology search never explored sheets.
+10. **No sequence was validated by refolding.** A self-consistency check of
     designed sequence against intended backbone was planned and not run.
-12. **One diffusion sample per prediction**, so no error bars on any
+11. **One diffusion sample per prediction**, so no error bars on any
     cofolding-derived quantity.
-13. **Only two of the three named screens are reported** (§3.10).
-14. **Three of 90 predictions are missing**, so two sequences lack a ΔΔG and sort
+12. **Only two of the three named screens are reported** (§3.10).
+13. **Three of 90 predictions are missing**, so two sequences lack a ΔΔG and sort
     last.
-15. **Five designs had a target side chain within 2.0 Å of binder backbone**
+14. **Five designs had a target side chain within 2.0 Å of binder backbone**
     before minimisation, with the backbone itself clear. Minimisation will have
     relieved some of that; it was not re-verified per design.
-16. **Scale.** 50 backbones is small for de novo binder design, where hit rates
+15. **Scale.** 50 backbones is small for de novo binder design, where hit rates
     are low and campaigns routinely sample thousands.
 
 ## 5. References
