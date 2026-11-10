@@ -83,9 +83,20 @@ FIELDS = (
 )
 
 
-def load_cif(path: Path):
-    """Read a Boltz-2 mmCIF with biotite, first model only."""
-    return get_structure(CIFFile.read(str(path)), model=1)
+def load_structure(path: Path):
+    """Read a prediction, mmCIF or PDB, first model only.
+
+    Hydrogens are dropped. Everything downstream - the Levy rSASA
+    classification, PRODIGY's contact counting - is parameterised on heavy
+    atoms, and the minimised structures from stage 10 carry hydrogens that
+    would change SASA values and make minimised and unminimised scores
+    incomparable.
+    """
+    if path.suffix == ".cif":
+        array = get_structure(CIFFile.read(str(path)), model=1)
+    else:
+        array = PDBFile.read(str(path)).get_structure(model=1)
+    return array[array.element != "H"]
 
 
 def chain_sequence(array, chain_id: str) -> str:
@@ -166,7 +177,7 @@ def prodigy_scores(pdb_text: str, name: str, selection: list[str]) -> dict:
 
 
 def score(path: Path, job: dict) -> dict:
-    array = load_cif(path)
+    array = load_structure(path)
     condition = job["condition"]
 
     chains = resolve_chains(array, job["binder_sequence"], job["peptide_sequence"])
@@ -245,6 +256,13 @@ def score(path: Path, job: dict) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
+    parser.add_argument(
+        "--structure",
+        default="model.cif",
+        help="file to score inside each job directory: model.cif (the raw "
+             "prediction, default) or model_min.pdb (minimised by stage 10)",
+    )
+    parser.add_argument("--out", type=Path, default=OUT)
     args = parser.parse_args()
 
     if not args.results.is_file():
@@ -254,11 +272,12 @@ def main() -> int:
 
     root = args.results.parent
     rows = []
-    print(f"scoring {len(jobs)} cofolded complex(es) from {root}\n")
+    print(f"scoring {len(jobs)} cofolded complex(es) from {root}")
+    print(f"structure: {args.structure}\n")
     for job in jobs:
-        model = root / job["job_id"] / "model.cif"
+        model = root / job["job_id"] / args.structure
         if not model.is_file():
-            print(f"  {job['job_id']:<22} missing model.cif")
+            print(f"  {job['job_id']:<22} missing {args.structure}")
             continue
         row = score(model, job)
         rows.append(row)
@@ -270,13 +289,13 @@ def main() -> int:
     if not rows:
         raise SystemExit("nothing scored")
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    with OUT.open("w", newline="") as handle:
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    with args.out.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=FIELDS, delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f"\nwrote {OUT.relative_to(ROOT)}")
+    print(f"\nwrote {args.out.relative_to(ROOT)}  (from {args.structure})")
     if not any(row["prodigy_dg"] != "" for row in rows):
         print("PRODIGY columns are blank - install prodigy-prot to fill them")
     return 0

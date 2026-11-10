@@ -1,0 +1,4 @@
+job_id	n_atoms	n_restrained	energy_before	energy_after	backbone_drift_a	drifted	elapsed_s
+nim1_0_s5_g12d	3924	1016	-4999.6	-14357.8	0.0925	False	34.7
+nim1_0_s5_wt	3919	1016	-5166.6	-14225.3	0.0906	False	32.4
+nim1_8_s4_g12d	4031	1056	-5861.2	-15469.1	0.0905	False	40.1

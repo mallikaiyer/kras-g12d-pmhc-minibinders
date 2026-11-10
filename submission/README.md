@@ -1,7 +1,7 @@
 # KRAS G12D / HLA-A*11:01 minibinders
 
-10 designed binder sequences from 7 distinct backbones.
-Generated 2026-11-09 23:02 UTC. Full method in `docs/methods.md`; pipeline in this repository.
+10 designed binder sequences from 5 distinct backbones.
+Generated 2026-11-10 00:43 UTC. Full method in `docs/methods.md`; pipeline in this repository.
 
 ## Target
 
@@ -19,19 +19,27 @@ The wild-type peptide is `VVVGAGGVGK`; it differs from the target at position
 
 | file | contents |
 |---|---|
-| `designs.fasta` | the binder sequences, ranked |
-| `designs.tsv` | the evidence behind each row |
+| `designs.csv` | the submission table: name, sequence, rank, ddG |
+| `designs.fasta` | the same sequences in FASTA |
+| `designs.tsv` | the full evidence behind each row |
 
 ## How the ranking was made
 
 Lexicographic, in this order:
 
-1. **Mutation specificity** - Asp6 buried surface area on binding, by the Levy
-   (2010) rSASA classification. All designs bury >= 10 A2.
+1. **Mutation specificity** - PRODIGY **ddG = dG(G12D) - dG(wild type)**, from
+   the same binder cofolded against peptides that differ at position 6 alone.
+   Negative favours the mutant. This is the primary criterion.
 2. **Peptide-dependent binding** - the peptide's share of target-side interface
-   area, >= 10% for every design here.
-3. **Affinity** - ProteinMPNN score, used only to choose between sequences on
-   the same backbone.
+   area on the crystal-derived target, >= 10% for every design here.
+3. **Affinity** - ProteinMPNN score, as the final tie-break.
+
+At most two sequences per backbone, so the set is not a bet on one backbone.
+
+`--rank-by burial` reproduces the structural alternative: Asp6 buried area in
+place of ddG, for the reason in `docs/methods.md` - the cofolded models bury
+Asp6, so the ddG values are measured on structures that do not present the
+residue under test. **Both rankings are reported; they disagree substantially.**
 
 ## What these numbers are not
 

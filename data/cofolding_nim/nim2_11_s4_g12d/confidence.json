@@ -1,0 +1,68 @@
+{
+ "metrics": {
+  "total_time_seconds": 1.5052860078867525,
+  "input_preparation_time_seconds": 0.0,
+  "dataloader_setup_time_seconds": 0.0,
+  "model_inference_time_seconds": 1.1491808369755745,
+  "postprocessing_time_seconds": 6.38868659734726e-05,
+  "affinity_prediction_time_seconds": 0.0,
+  "response_construction_time_seconds": 0.0,
+  "artifact_write_time_seconds": 0.07592964102514088,
+  "postprocess_time_seconds": 0.0826010899618268,
+  "model_forward_time_seconds": 1.0665797470137477
+ },
+ "confidence_scores": [
+  0.9087703824043274
+ ],
+ "affinities": {},
+ "ptm_scores": [
+  0.7911977767944336
+ ],
+ "iptm_scores": [
+  0.7553130984306335
+ ],
+ "ligand_iptm_scores": [
+  0.0
+ ],
+ "protein_iptm_scores": [
+  0.7553130984306335
+ ],
+ "complex_plddt_scores": [
+  0.9471346735954285
+ ],
+ "complex_iplddt_scores": [
+  0.9442346692085266
+ ],
+ "complex_pde_scores": [
+  0.5807592272758484
+ ],
+ "complex_ipde_scores": [
+  4.412647247314453
+ ],
+ "chains_ptm_scores": [
+  0.9762126803398132,
+  0.9477024674415588,
+  0.955293595790863
+ ],
+ "pair_chains_iptm_scores": [
+  {
+   "0": {
+    "0": 0.9762126803398132,
+    "1": 0.936545729637146,
+    "2": 0.20848509669303894
+   },
+   "1": {
+    "0": 0.9493322968482971,
+    "1": 0.9477024674415588,
+    "2": 0.256371408700943
+   },
+   "2": {
+    "0": 0.26230835914611816,
+    "1": 0.2540057599544525,
+    "2": 0.955293595790863
+   }
+  }
+ ],
+ "pae": null,
+ "pde": null
+}

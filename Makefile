@@ -7,7 +7,7 @@
 PYTHON ?= python
 SCRIPTS := scripts
 
-.PHONY: help install fetch survey rotamers targets relax stage backbones nim nim-key nim-smoke rotamer-sensitivity sequences select stage-cofolding cofold score-cofold package test lint clean
+.PHONY: help install fetch survey rotamers targets relax stage backbones nim nim-key nim-smoke rotamer-sensitivity sequences select stage-cofolding cofold score-cofold minimise-cofold score-cofold-min package test lint clean
 
 # Where scripts/05a_stage_to_drive.py puts the target for Colab to read, and
 # where scripts/05_ingest_backbones.py reads the results back from. Override on
@@ -44,7 +44,9 @@ help:
 	@echo "Cofolding (stage 07; needs a GPU, so the middle step runs in Colab)"
 	@echo "  make stage-cofolding  write Boltz-2 inputs to Drive for notebooks/07_*.ipynb"
 	@echo "  make cofold      cofold via the hosted Boltz-2 endpoint (no GPU needed)"
-	@echo "  make score-cofold  Levy + ipTM + PRODIGY on the cofolded models"
+	@echo "  make score-cofold  Levy + ipTM + PRODIGY on the raw cofolded models"
+	@echo "  make minimise-cofold   protonate + restrained minimisation of each model"
+	@echo "  make score-cofold-min  the same scoring on the minimised models"
 	@echo ""
 	@echo "Submission (stage 09)"
 	@echo "  make package     rank the designs -> submission/"
@@ -100,6 +102,13 @@ PER_DESIGN ?= 2
 
 cofold:
 	$(PYTHON) $(SCRIPTS)/07b_nim_cofolding.py --per-design $(PER_DESIGN)
+
+minimise-cofold:
+	$(PYTHON) $(SCRIPTS)/10_minimize_cofolded.py
+
+score-cofold-min:
+	$(PYTHON) $(SCRIPTS)/08_score_cofolded.py --structure model_min.pdb \
+	  --out results/cofolding/SCORES_min.tsv
 
 score-cofold:
 	$(PYTHON) $(SCRIPTS)/08_score_cofolded.py

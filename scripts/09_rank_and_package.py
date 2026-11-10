@@ -52,6 +52,7 @@ MANIFEST = ROOT / "data" / "backbones" / "MANIFEST.tsv"
 SELECTED = ROOT / "data" / "sequences" / "SELECTED.tsv"
 ROTAMER = ROOT / "results" / "rotamer_sensitivity.tsv"
 COFOLD = ROOT / "results" / "cofolding" / "SCORES.tsv"
+COFOLD_MIN = ROOT / "results" / "cofolding" / "SCORES_min.tsv"
 OUT_DIR = ROOT / "submission"
 
 PEPTIDE_G12D = "VVVGADGVGK"
@@ -59,9 +60,18 @@ PEPTIDE_G12D = "VVVGADGVGK"
 FIELDS = (
     "rank", "design_id", "backbone_id", "sample", "binder_length",
     "binder_sequence",
+    "prodigy_ddg", "prodigy_dg_g12d", "prodigy_dg_wt", "favours",
     "asp6_class", "asp6_sasa_loss", "peptide_share", "compactness",
     "mpnn_score", "rotamer_robust",
-    "cofold_iptm_binder_peptide", "cofold_prodigy_dg", "cofold_caveat",
+    "cofold_iptm_binder_peptide", "structures", "cofold_caveat",
+)
+
+#: The columns the submission CSV carries, narrowest first. The challenge asks
+#: for a CSV; these are the identifying and the ranking columns, not the whole
+#: evidence table, which stays in designs.tsv.
+CSV_FIELDS = (
+    "design_name", "sequence", "rank", "prodigy_ddg", "favours",
+    "asp6_sasa_loss", "peptide_share", "binder_length", "backbone_id",
 )
 
 
@@ -78,6 +88,24 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--max-designs", type=int, default=10)
     parser.add_argument("--per-design", type=int, default=2)
+    parser.add_argument(
+        "--cofold-scores",
+        type=Path,
+        default=None,
+        help="stage-08 scores to rank on. Defaults to the minimised scores "
+             f"({COFOLD_MIN.name}) when they exist, otherwise the raw "
+             f"predictions ({COFOLD.name}). PRODIGY counts atomic contacts, so "
+             "minimised side chains are the better input.",
+    )
+    parser.add_argument(
+        "--rank-by",
+        choices=("ddg", "burial"),
+        default="ddg",
+        help="ddg (default): PRODIGY dG(G12D) - dG(wild type), the project's "
+             "stated specificity criterion. burial: Asp6 buried area on the "
+             "crystal-derived target, the structural fallback used when "
+             "cofolding is absent.",
+    )
     args = parser.parse_args()
 
     backbones = {
@@ -92,49 +120,90 @@ def main() -> int:
         raise SystemExit("no sequence survives the gate and the selection filters")
 
     rotamer = {row["backbone_id"]: row for row in read_tsv(ROTAMER, required=False)}
+
+    scores_path = args.cofold_scores
+    if scores_path is None:
+        scores_path = COFOLD_MIN if COFOLD_MIN.is_file() else COFOLD
+    minimised = scores_path.name == COFOLD_MIN.name
     cofold = collections.defaultdict(dict)
-    for row in read_tsv(COFOLD, required=False):
+    for row in read_tsv(scores_path, required=False):
         cofold[(row["backbone_id"], row["sample"])][row["condition"]] = row
+    print(f"ranking on {scores_path.relative_to(ROOT)} "
+          f"({'minimised' if minimised else 'raw predictions'})\n")
 
-    # 1 and 2: order the backbones. Asp6 burial first, peptide share second.
-    ranked_backbones = sorted(
-        backbones.values(),
-        key=lambda r: (-float(r["asp6_sasa_loss"]), -float(r["peptide_share"])),
-    )
+    # --- the ranking ------------------------------------------------------
+    # Primary criterion is mutation specificity. With cofolding available that
+    # is PRODIGY's ddG: dG(G12D) - dG(wild type), both from the same binder
+    # folded against peptides differing at position 6 alone. Negative means the
+    # binder is predicted to prefer the mutant, which is the whole objective.
+    #
+    # ddG ranks per *sequence*, not per backbone, because each sequence has its
+    # own pair of predictions - a meaningful improvement over ranking backbones.
+    def ddg_of(row):
+        pair = cofold.get((row["backbone_id"], row["sample"]), {})
+        g12d, wt = pair.get("g12d"), pair.get("wt")
+        if not g12d or not wt:
+            return None
+        try:
+            return float(g12d["prodigy_dg"]) - float(wt["prodigy_dg"])
+        except (ValueError, KeyError):
+            return None
 
-    by_design = collections.defaultdict(list)
+    scored = []
     for row in sequences:
-        by_design[row["backbone_id"]].append(row)
+        backbone = backbones[row["backbone_id"]]
+        ddg = ddg_of(row)
+        scored.append({"sequence_row": row, "backbone": backbone, "ddg": ddg})
 
-    # 3: affinity last, and only as the tie-break within a backbone.
-    candidates = {
-        backbone["backbone_id"]: sorted(
-            by_design.get(backbone["backbone_id"], []),
-            key=lambda r: float(r["score"]),
-        )[: args.per_design]
-        for backbone in ranked_backbones
-    }
+    missing = [s for s in scored if s["ddg"] is None]
+    if args.rank_by == "ddg" and len(missing) == len(scored):
+        raise SystemExit(
+            "ranking by ddG needs cofolding for both conditions and none is "
+            "present - run scripts/07b_nim_cofolding.py, or pass "
+            "--rank-by burial"
+        )
 
-    # Allocated round-robin rather than by filling each backbone in turn: with
-    # 10 slots and 2 per design, filling in order would spend every slot on the
-    # top five backbones and leave two unrepresented. One sequence from each
-    # backbone comes first, then second sequences in the same order. Submitting
-    # several sequences from one backbone is a bet on that backbone, and there
-    # is no evidence here strong enough to justify concentrating the set.
-    order = []
-    for slot in range(args.per_design):
-        for backbone in ranked_backbones:
-            picks = candidates.get(backbone["backbone_id"], [])
-            if slot < len(picks):
-                order.append((backbone, picks[slot]))
+    if args.rank_by == "ddg":
+        # Sequences without a ddG sort last rather than being dropped, so the
+        # set can still be filled if cofolding is incomplete.
+        def key(s):
+            return (
+                s["ddg"] is None,
+                s["ddg"] if s["ddg"] is not None else 0.0,
+                -float(s["backbone"]["peptide_share"]),
+                float(s["sequence_row"]["score"]),
+            )
+    else:
+        # The structural fallback: Asp6 burial on the crystal-derived target,
+        # then peptide share, then MPNN score. Used when cofolding is absent or
+        # judged unusable - see docs/methods.md on the buried-Asp6 problem.
+        def key(s):
+            return (
+                -float(s["backbone"]["asp6_sasa_loss"]),
+                -float(s["backbone"]["peptide_share"]),
+                float(s["sequence_row"]["score"]),
+            )
 
+    scored.sort(key=key)
+
+    # A per-backbone cap, applied after ranking. Several sequences from one
+    # backbone is a bet on that backbone, and the evidence here does not support
+    # concentrating the set however well one sequence scores.
     rows, rank = [], 0
-    for backbone, candidate in order:
-        design_id = backbone["backbone_id"]
+    used = collections.Counter()
+    for entry in scored:
         if rank >= args.max_designs:
             break
+        design_id = entry["sequence_row"]["backbone_id"]
+        if used[design_id] >= args.per_design:
+            continue
+        used[design_id] += 1
         rank += 1
-        g12d = cofold.get((design_id, candidate["sample"]), {}).get("g12d", {})
+
+        candidate = entry["sequence_row"]
+        backbone = entry["backbone"]
+        pair = cofold.get((design_id, candidate["sample"]), {})
+        g12d, wt = pair.get("g12d", {}), pair.get("wt", {})
         rows.append({
             "rank": rank,
             "design_id": f"kras_g12d_binder_{rank:02d}",
@@ -150,10 +219,20 @@ def main() -> int:
             "rotamer_robust": rotamer.get(design_id, {}).get(
                 "alternative_passes", "unknown"
             ),
+            "prodigy_dg_g12d": g12d.get("prodigy_dg", ""),
+            "prodigy_dg_wt": wt.get("prodigy_dg", ""),
+            "prodigy_ddg": (
+                "" if entry["ddg"] is None else round(entry["ddg"], 3)
+            ),
+            "favours": (
+                "" if entry["ddg"] is None
+                else "G12D" if entry["ddg"] < 0 else "wild type"
+            ),
             "cofold_iptm_binder_peptide": g12d.get("iptm_binder_peptide", ""),
-            "cofold_prodigy_dg": g12d.get("prodigy_dg", ""),
+            "structures": "minimised" if minimised else "raw prediction",
             "cofold_caveat": (
-                "Asp6 buried in cofolded model; not ranked on" if g12d else "not cofolded"
+                "Asp6 buried in cofolded model (rSASA 0.11-0.12 vs 0.59 in the "
+                "crystal-derived target)" if g12d else "not cofolded"
             ),
         })
 
@@ -163,6 +242,25 @@ def main() -> int:
         writer = csv.DictWriter(handle, fieldnames=FIELDS, delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
+
+    # The CSV the challenge asks for. Comma-delimited, one row per design, with
+    # the identifying columns first. Confirm the header against the challenge
+    # page before submitting: the names below are this project's own.
+    with (OUT_DIR / "designs.csv").open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({
+                "design_name": row["design_id"],
+                "sequence": row["binder_sequence"],
+                "rank": row["rank"],
+                "prodigy_ddg": row["prodigy_ddg"],
+                "favours": row["favours"],
+                "asp6_sasa_loss": row["asp6_sasa_loss"],
+                "peptide_share": row["peptide_share"],
+                "binder_length": row["binder_length"],
+                "backbone_id": row["backbone_id"],
+            })
 
     fasta = []
     for row in rows:
@@ -199,19 +297,27 @@ The wild-type peptide is `VVVGAGGVGK`; it differs from the target at position
 
 | file | contents |
 |---|---|
-| `designs.fasta` | the binder sequences, ranked |
-| `designs.tsv` | the evidence behind each row |
+| `designs.csv` | the submission table: name, sequence, rank, ddG |
+| `designs.fasta` | the same sequences in FASTA |
+| `designs.tsv` | the full evidence behind each row |
 
 ## How the ranking was made
 
 Lexicographic, in this order:
 
-1. **Mutation specificity** - Asp6 buried surface area on binding, by the Levy
-   (2010) rSASA classification. All designs bury >= 10 A2.
+1. **Mutation specificity** - PRODIGY **ddG = dG(G12D) - dG(wild type)**, from
+   the same binder cofolded against peptides that differ at position 6 alone.
+   Negative favours the mutant. This is the primary criterion.
 2. **Peptide-dependent binding** - the peptide's share of target-side interface
-   area, >= 10% for every design here.
-3. **Affinity** - ProteinMPNN score, used only to choose between sequences on
-   the same backbone.
+   area on the crystal-derived target, >= 10% for every design here.
+3. **Affinity** - ProteinMPNN score, as the final tie-break.
+
+At most two sequences per backbone, so the set is not a bet on one backbone.
+
+`--rank-by burial` reproduces the structural alternative: Asp6 buried area in
+place of ddG, for the reason in `docs/methods.md` - the cofolded models bury
+Asp6, so the ddG values are measured on structures that do not present the
+residue under test. **Both rankings are reported; they disagree substantially.**
 
 ## What these numbers are not
 
