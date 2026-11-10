@@ -182,15 +182,32 @@ Two backbones yield nothing usable. One of them, `nim3_0`, has the **best MPNN
 score of the entire set** (0.683) and is 87% a single residue — score alone would
 have selected the worst design.
 
-## 6. Counter-screen (stages 07–08)
+## 6. Counter-screen (stages 07, 10, 08)
 
-**Boltz-2** cofolding, each selected sequence against the G12D and wild-type
-peptides — which differ at position 6 alone — to isolate the mutation. PRODIGY
-on the resulting complexes for binding free energy. Cofolding is what makes
-PRODIGY possible at all: it counts atomic contacts, so it needs side chains on
-both partners, and stage 05 produces backbones only.
+**Boltz-2** cofolding via NVIDIA's hosted endpoint, every selected sequence
+against the G12D and wild-type peptides — which differ at position 6 alone, so
+the pair isolates the mutation. 87 of 90 predictions completed; the run stalled
+on a hung request, and the HTTP client sets no socket timeout.
 
-**This screen did not work, and its output is reported but not ranked on.**
+Each prediction is **protonated and minimised** before scoring (stage 10).
+PRODIGY counts atomic contacts across the interface, so its answer depends on
+side-chain placement, and raw predicted side chains are the weakest part of that
+input — the minimisations moved the potential energy from about −5,000 to
+−14,400 kcal/mol, which is a measure of how far from a force-field minimum they
+started. The protocol is stage 04's, and for stage 04's reason: amber14 with GBn2
+implicit solvent, backbone heavy atoms restrained at 10 kcal/mol/Å², every side
+chain free, no dynamics. The predicted pose is what is under test and must not
+drift — observed backbone drift is ~0.09 Å — while the side chains, which are
+what PRODIGY counts, are free to settle. **Both conditions of a given sequence
+receive a byte-identical protocol**, which is the entire basis of the ΔΔG
+comparison: relaxing them differently would make them differ for reasons
+unrelated to position 6.
+
+Cofolding is what makes PRODIGY possible at all: stage 05 produces backbones
+only, and nothing contact-based can run on those.
+
+**One result of this screen undermines its own premise, and is reported rather
+than buried.**
 
 In the cofolded models Asp6's rSASA within the pMHC is **0.11–0.12**, against
 **0.59** in the crystal-derived target. The models bury the residue under test
@@ -216,20 +233,37 @@ any cannot be identified.
 
 ## 7. Ranking and selection (stage 09)
 
-Lexicographic, on the **crystal-derived** target rather than the cofolded models,
-for the reason in §6 — ranking on structures that do not present the residue
-under test would rank on an artefact.
+Lexicographic, in the project's stated order of precedence:
 
-1. **Mutation specificity** — Asp6 buried surface area (≥ 10 Å² for all).
-2. **Peptide-dependent binding** — peptide share of target-side interface
-   (≥ 10% for all).
-3. **Affinity** — ProteinMPNN score, used only to choose between sequences on the
-   same backbone.
+1. **Mutation specificity** — **PRODIGY ΔΔG = ΔG(G12D) − ΔG(wild type)**, both
+   from the same binder cofolded and minimised against peptides differing at
+   position 6 alone. Negative favours the mutant. This is the primary criterion
+   and what the submitted CSV is ordered by.
+2. **Peptide-dependent binding** — the peptide's share of the target-side
+   interface on the crystal-derived target, ≥ 10% for every design here.
+3. **Affinity** — ProteinMPNN score, as the final tie-break.
 
-10 sequences are submitted, allocated **round-robin across all 7 backbones**
-before any backbone gets a second slot. Submitting several sequences from one
-backbone is a bet on that backbone, and nothing here justifies concentrating the
-set.
+Ranking is per **sequence**, not per backbone: each sequence has its own pair of
+predictions, so each has its own ΔΔG.
+
+**20 sequences are submitted**, the maximum the competition accepts from this
+track. `molecule_class` is `protein` for all of them — single-chain de novo
+miniproteins of 61–75 residues, which falls in the competition's *protein
+minibinder* evaluation category (40–100 aa).
+
+**Declared epitope.** Every design was generated with RFdiffusion hotspots on
+peptide positions 5, 6 and 7, and selected for burying peptide residue 6. The
+intended epitope is therefore the peptide and the groove immediately around it,
+centred on position 6 — the one residue that differs between the G12D and
+wild-type targets. This is stated so it need not be inferred from a prediction.
+
+Two screens accompany each design in the CSV: **mean Kyte-Doolittle hydropathy**,
+computed locally, and **complex pLDDT** from the cofolding response. The third
+screen named by the competition, **ipSAE, could not be computed** — see §8.
+
+`--rank-by burial` reproduces an alternative ordering on Asp6 buried area
+instead of ΔΔG. The two disagree substantially, and §8 item 7 gives the reason
+to treat the ΔΔG ordering with caution.
 
 ## 8. Stated shortcomings
 
@@ -255,33 +289,78 @@ Listed because they bear on how the results should be read, not as hedging.
    designs. The topology search never explored sheets.
 6. **No sequence was validated by refolding.** An AF2/Boltz self-consistency
    check of designed sequence against intended backbone was planned and not run.
-7. **One diffusion sample per cofolding prediction**, so no error bars; the ±0.07
-   specificity differences in §6 are not distinguishable from noise.
-8. **Five designs carry `needs_repack`** — a target side chain sits within 2.0 Å
-   of binder backbone with the backbone itself clear. Any energetic claim for
-   those requires repacking first.
-9. **Scale.** 50 backbones is small for de novo binder design, where hit rates
-   are low and campaigns routinely sample thousands.
+7. **The ranking criterion is, by its own evidence, noise-dominated.** All
+   sequences on one backbone share the same intended pose, so a genuine Asp6
+   specificity signal should be similar across them. It is not. The spread of
+   ΔΔG *within* a backbone is **sd 1.23 kcal/mol** while the spread *between*
+   backbone means is **sd 0.71** — a signal-to-noise ratio of 0.58. Across all
+   43 sequences with both conditions, 18 favour G12D where a coin flip predicts
+   21.5. Differences of ~1 kcal/mol between designs are therefore inside the
+   noise, and selecting the most negative values selects partly for noise. The
+   submission is ordered by ΔΔG because that is the project's stated criterion
+   and the best available; this item is the honest measure of how much weight the
+   order can carry.
+8. **No apo condition was predicted.** The competition's second-hardest stated
+   goal is no binding to the HLA with no peptide, and this submission carries no
+   evidence on it. The condition was staged for a Colab run that was not
+   performed, and the hosted endpoint stopped serving requests before it could
+   be done there.
+9. **The cofolded target is a truncation.** Heavy-chain residues 1–180 (α1/α2)
+   plus the peptide, without β2-microglobulin or α3, where the competition
+   specifies modelling the whole complex. The groove face the binder was
+   designed against is present, but the ΔG values are not directly comparable
+   with numbers computed on the full construct.
+10. **Only two of the three named screens are reported.** ipSAE could not be
+    computed: the hosted endpoint returns the PAE matrix as `null`, and ipSAE is
+    derived from PAE. A local Boltz run would supply it.
+11. **Three of 90 cofolding predictions are missing**, so two sequences lack a
+    ΔΔG and sort last.
+12. **Five designs carry `needs_repack`** — a target side chain sits within 2.0 Å
+    of binder backbone with the backbone itself clear. Minimisation will have
+    relieved some of that, but it was not verified per design.
+13. **Scale.** 50 backbones is small for de novo binder design, where hit rates
+    are low and campaigns routinely sample thousands.
 
 ## 9. Reproducibility
 
 ```bash
 conda activate kras-pmhc
 make fetch survey rotamers targets relax   # stages 00-04
-make nim                                   # stage 05 generation
-make backbones                             # scoring and the design gate
-make sequences select                      # stage 06
-python scripts/07b_nim_cofolding.py        # stage 07 counter-screen
-python scripts/08_score_cofolded.py        # stage 08
-python scripts/09_rank_and_package.py      # stage 09 -> submission/
+make nim-key                               # store the API key (hidden prompt)
+make nim                                   # stage 05: 50 backbones
+make backbones                             # scoring and the five-criterion gate
+make rotamer-sensitivity                   # how far the gate depends on the rotamer
+make sequences select                      # stage 06: ProteinMPNN, then filtering
+make cofold PER_DESIGN=10                  # stage 07: cofold against G12D and WT
+make minimise-cofold                       # stage 10: protonate + minimise
+make score-cofold-min                      # stage 08: Levy + ipTM + PRODIGY
+make package                               # stage 09 -> submission/
 make test lint
 ```
 
 Every threshold quoted here is a named constant in the script that applies it,
-and every number is traceable to a file: per-residue Levy tables in
-`results/interface/`, raw service responses in `results/sequences/` and
-`data/cofolding_nim/`, and the full design manifest in
-`data/backbones/MANIFEST.tsv`.
+and every number is traceable to a file:
+
+| | |
+|---|---|
+| `data/backbones/MANIFEST.tsv` | all 50 designs, every gate input and verdict |
+| `results/interface/` | per-residue Levy tables behind each interface number |
+| `results/rotamer_sensitivity.tsv` | the same designs scored on the alternative rotamer |
+| `results/sequences/` | raw ProteinMPNN responses, verbatim |
+| `data/cofolding_nim/` | predictions, minimised models, and minimisation energies |
+| `results/cofolding/SCORES_min.tsv` | the scores the ranking is computed from |
+| `submission/` | the CSV, FASTA, evidence table, this document, and structures |
+
+The repository has 153 tests. The analysis code is covered directly; the two GPU
+notebooks are checked for syntax and for pinned parameters, because a typo in one
+only surfaces after minutes of installation on a session that may not be granted
+again.
+
+**Stages that were not fully scripted.** Backbone generation and cofolding both
+needed a GPU this machine does not have. Both ended up on hosted endpoints and
+are scripted; the Colab notebooks written for them, and the manual steps they
+would have required, are recorded in `docs/colab_runbook.md` along with the
+environment failures that made them necessary.
 
 ## References
 
@@ -291,5 +370,7 @@ and every number is traceable to a file: per-residue Levy tables in
 - Dauparas, J. et al. (2022) *Science* **378**:49 — ProteinMPNN.
 - Wohlwend, J. et al. (2024/2025) — Boltz-1 / Boltz-2.
 - Xue, L.C. et al. (2016) *Bioinformatics* **32**:3676 — PRODIGY.
+- Kyte, J. & Doolittle, R.F. (1982) *J Mol Biol* **157**:105 — hydropathy scale.
+- Eastman, P. et al. (2017) *PLoS Comput Biol* **13**:e1005659 — OpenMM.
 - Poole, A. et al. (2022) *Nat Commun* **13**:5333 — TCR recognition of KRAS
   G12D on HLA-A\*11:01.
