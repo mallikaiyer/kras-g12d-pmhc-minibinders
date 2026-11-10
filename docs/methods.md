@@ -280,6 +280,22 @@ returned chain labels: the endpoint relabels chains sequentially by submission
 order rather than preserving the identifiers it is given, and trusting those
 labels placed the binder where the peptide was expected.
 
+In these predictions peptide residue 6 is buried within the groove — relative
+SASA 0.11–0.12, against 0.59 in the prepared target — so unfortunately the
+aspartate is largely unavailable at the modelled interface. The predicted
+peptide register therefore differs from the open conformation these designs were
+built against.
+
+We proceeded with the screen regardless, on the expectation that a buried
+carboxylate still exerts electrostatic influence beyond its own solvent shell,
+and that a differential measured across the two peptides might register it. This
+system supplies the precedent directly: the natural TCR discriminates G12D from
+wild type while engaging residue 6 only as a **rim** residue, losing 16.2 Å² of
+its surface and never desolvating it (§3.4). Discrimination in this epitope
+demonstrably does not require burial, so a long-range or indirect electrostatic
+contribution is not an unreasonable thing to look for. Whether the ΔΔG values
+below in fact capture it is not established.
+
 ### 3.9 Minimisation of the predicted complexes
 
 Each cofolded complex was protonated and minimised before scoring, under the
