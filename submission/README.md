@@ -1,7 +1,7 @@
 # KRAS G12D / HLA-A*11:01 minibinders
 
-10 designed binder sequences from 5 distinct backbones.
-Generated 2026-11-10 00:43 UTC. Full method in `docs/methods.md`; pipeline in this repository.
+20 designed binder sequences from 6 distinct backbones.
+Generated 2026-11-10 03:18 UTC. Full method in `docs/methods.md`; pipeline in this repository.
 
 ## Target
 
@@ -19,9 +19,15 @@ The wild-type peptide is `VVVGAGGVGK`; it differs from the target at position
 
 | file | contents |
 |---|---|
-| `designs.csv` | the submission table: name, sequence, rank, ddG |
+| `designs.csv` | **the submission**: name, sequence, molecule_class,
+  ranked best-first, plus metrics |
 | `designs.fasta` | the same sequences in FASTA |
 | `designs.tsv` | the full evidence behind each row |
+| `methods.md` | how every number was produced, and what it is not |
+| `structures/` | the minimised cofolded complex for each design, against both peptides |
+| `structures/backbones/` | the RFdiffusion backbone each design was built on |
+
+All designs are single-chain de novo miniproteins: `molecule_class = protein`.
 
 ## How the ranking was made
 

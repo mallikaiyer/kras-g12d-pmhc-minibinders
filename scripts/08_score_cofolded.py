@@ -295,7 +295,7 @@ def main() -> int:
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f"\nwrote {args.out.relative_to(ROOT)}  (from {args.structure})")
+    print(f"\nwrote {args.out}  (from {args.structure})")
     if not any(row["prodigy_dg"] != "" for row in rows):
         print("PRODIGY columns are blank - install prodigy-prot to fill them")
     return 0
