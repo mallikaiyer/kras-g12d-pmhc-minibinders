@@ -37,6 +37,7 @@ import collections
 import csv
 import shutil
 import sys
+import textwrap
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -364,6 +365,21 @@ def main() -> int:
 
     stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     designs = len({row["backbone_id"] for row in rows})
+    # How the submitted set actually distributes over backbones. Ranking purely
+    # by ddG implies no per-backbone cap, so any concentration is a consequence
+    # of the ranking rather than a choice, and is reported rather than claimed
+    # away.
+    spread = collections.Counter(row["backbone_id"] for row in rows)
+    cap = (
+        f"At most {args.per_design} sequence(s) per backbone."
+        if args.per_design
+        else "No per-backbone cap was applied: ranking purely by ddG implies none."
+    )
+    spread_text = ", ".join(f"{name} {n}" for name, n in spread.most_common())
+    # Hard-wrapped to match the hand-written prose around it in the template.
+    cap_paragraph = textwrap.fill(
+        f"{cap} Sequences per backbone: {spread_text}.", width=78
+    )
     readme = f"""# KRAS G12D / HLA-A*11:01 minibinders
 
 {len(rows)} designed binder sequences from {designs} distinct backbones.
@@ -385,8 +401,7 @@ The wild-type peptide is `VVVGAGGVGK`; it differs from the target at position
 
 | file | contents |
 |---|---|
-| `designs.csv` | **the submission**: name, sequence, molecule_class,
-  ranked best-first, plus metrics |
+| `designs.csv` | **the submission**: name, sequence, molecule_class, plus metrics; best first |
 | `designs.fasta` | the same sequences in FASTA |
 | `designs.tsv` | the full evidence behind each row |
 | `methods.md` | how every number was produced, and what it is not |
@@ -406,12 +421,13 @@ Lexicographic, in this order:
    area on the crystal-derived target, >= 10% for every design here.
 3. **Affinity** - ProteinMPNN score, as the final tie-break.
 
-At most two sequences per backbone, so the set is not a bet on one backbone.
+{cap_paragraph}
 
-`--rank-by burial` reproduces the structural alternative: Asp6 buried area in
-place of ddG, for the reason in `docs/methods.md` - the cofolded models bury
-Asp6, so the ddG values are measured on structures that do not present the
-residue under test. **Both rankings are reported; they disagree substantially.**
+`--rank-by burial` offers a structural alternative - Asp6 buried area on the
+crystal-derived target in place of ddG - for the reason in `docs/methods.md`:
+the cofolded models bury Asp6, so the ddG values are measured on structures that
+do not present the residue under test. **It was not used here. Only the ddG
+ranking is reported in this bundle.**
 
 ## What these numbers are not
 

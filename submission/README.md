@@ -1,7 +1,7 @@
 # KRAS G12D / HLA-A*11:01 minibinders
 
 20 designed binder sequences from 6 distinct backbones.
-Generated 2026-11-10 03:18 UTC. Full method in `docs/methods.md`; pipeline in this repository.
+Generated 2026-11-11 19:34 UTC. Full method in `docs/methods.md`; pipeline in this repository.
 
 ## Target
 
@@ -19,8 +19,7 @@ The wild-type peptide is `VVVGAGGVGK`; it differs from the target at position
 
 | file | contents |
 |---|---|
-| `designs.csv` | **the submission**: name, sequence, molecule_class,
-  ranked best-first, plus metrics |
+| `designs.csv` | **the submission**: name, sequence, molecule_class, plus metrics; best first |
 | `designs.fasta` | the same sequences in FASTA |
 | `designs.tsv` | the full evidence behind each row |
 | `methods.md` | how every number was produced, and what it is not |
@@ -40,12 +39,14 @@ Lexicographic, in this order:
    area on the crystal-derived target, >= 10% for every design here.
 3. **Affinity** - ProteinMPNN score, as the final tie-break.
 
-At most two sequences per backbone, so the set is not a bet on one backbone.
+No per-backbone cap was applied: ranking purely by ddG implies none. Sequences
+per backbone: nim1_8 7, nim2_17 4, nim2_11 3, nim3_13 3, nim1_0 2, nim2_5 1.
 
-`--rank-by burial` reproduces the structural alternative: Asp6 buried area in
-place of ddG, for the reason in `docs/methods.md` - the cofolded models bury
-Asp6, so the ddG values are measured on structures that do not present the
-residue under test. **Both rankings are reported; they disagree substantially.**
+`--rank-by burial` offers a structural alternative - Asp6 buried area on the
+crystal-derived target in place of ddG - for the reason in `docs/methods.md`:
+the cofolded models bury Asp6, so the ddG values are measured on structures that
+do not present the residue under test. **It was not used here. Only the ddG
+ranking is reported in this bundle.**
 
 ## What these numbers are not
 

@@ -60,3 +60,50 @@ These bear on how the results should be read. They are recorded here
 rather than in the submitted paper because the submission is a ranked CSV
 and a methods description; a self-assessment of the work's weaknesses is
 for the record, not for the submission.
+
+# Potential improvements
+
+Each addresses one or more of the shortcomings above, roughly in order of how
+much it would change the result.
+
+1. **Attempt to fix the counter-screen so it presents the residue under test**
+   (2, 11). The single highest-value change. Options, cheapest first: cofold
+   with a multiple-sequence alignment rather than in single-sequence mode; take
+   several diffusion samples and check the peptide register in each; constrain
+   or template the peptide to the open backbone.
+2. **Measure the open-state population** (4, 5). The conformational-selection
+   premise is currently supported by crystallographic observability alone.
+   Enhanced-sampling molecular dynamics on the free G12D complex would put a
+   number on *p*, and therefore on the penalty the approach is paying. If the
+   open state turns out to be rare, the premise needs revisiting rather than
+   refining.
+3. **Add the apo condition** (6). Objective 2 carries no evidence at all.
+   Cofolding each design against the peptide-free groove is the same machinery
+   already built, one more condition — it was dropped for time.
+4. **Regain control of the generator's noise scale, and scale up** (8, 15).
+   Running RFdiffusion via Colab or Kaggle rather than through the NVIDIA hosted
+   endpoint restores `noise_scale_ca`/`noise_scale_frame` = 0.5, which the
+   authors recommend for interfaces precisely because it improves designability,
+   and removes the per-call ceiling that capped this run at 50 backbones.
+   Hundreds to thousands is the published norm.
+5. **Add a refolding self-consistency filter** (10). Predict each designed
+   sequence alone and require the result to match the backbone it was designed
+   for. This catches sequences that score well without encoding their intended
+   fold, which nothing here tested.
+6. **Explore non-helical topologies** (9). Every design is 84–97% helix with
+   zero strand content. Secondary-structure or fold conditioning, or the beta
+   checkpoint, would at least test whether a sheet-containing binder reads this
+   epitope better.
+7. **Carry a rotamer ensemble rather than one rotamer** (3). Nine of 50 gate
+   verdicts move between two rotamers. Scoring against several and requiring a
+   design to pass under all of them converts a modelling assumption into a
+   robustness criterion. The data for two rotamers already exists in
+   `results/rotamer_sensitivity.tsv`.
+8. **Score on the full construct** (7). Including β2-microglobulin and α3 makes
+   the predicted free energies comparable with literature values computed on the
+   intact complex, at the cost of a larger prediction.
+9. **Report ipSAE** (12). The hosted endpoint returns a null PAE matrix and
+   ipSAE is derived from it; a local prediction, or an endpoint that returns PAE,
+   makes the third named screen computable.
+10. **Re-verify clashes after minimisation** (14). Cheap, and closes a gap that
+    is currently stated rather than resolved.
