@@ -1,3 +1,8 @@
+> **The organisers' document, not my own work.** Reproduced here for convenience,
+> so the requirements this project was designed against can be read alongside the
+> methods. Source:
+> <https://proteinbase.com/competitions/anthropic-adaptyv-2026/challenges/pmhc>
+
 # Anthropic × Adaptyv Protein Design Competition FAQs
 
 We recommend providing this FAQs list to your Claudes. We expect to update this document throughout the competition as more FAQs emerge.
