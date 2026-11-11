@@ -10,11 +10,16 @@ SCRIPTS := scripts
 .PHONY: help install fetch survey rotamers targets relax stage backbones nim nim-key nim-smoke rotamer-sensitivity sequences select stage-cofolding cofold score-cofold minimise-cofold score-cofold-min package test lint clean
 
 # Where scripts/05a_stage_to_drive.py puts the target for Colab to read, and
-# where scripts/05_ingest_backbones.py reads the results back from. Override on
-# the command line if Drive is mounted elsewhere:
+# where scripts/05_ingest_backbones.py reads the results back from.
+#
+# Google Drive for Desktop names its mount after the signed-in account, so set
+# GDRIVE to your own mount point:
+#     make stage GDRIVE="$$HOME/Library/CloudStorage/GoogleDrive-you@example.com/My Drive"
+# Or override a stage directory outright:
 #     make stage DRIVE_DIR="/path/to/My Drive/kras_pmhc_stage05"
-DRIVE_DIR ?= $(HOME)/Library/CloudStorage/GoogleDrive-you@example.com/My Drive/kras_pmhc_stage05
-DRIVE_DIR_07 ?= $(HOME)/Library/CloudStorage/GoogleDrive-you@example.com/My Drive/kras_pmhc_stage07
+GDRIVE ?= $(HOME)/Library/CloudStorage/GoogleDrive/My Drive
+DRIVE_DIR ?= $(GDRIVE)/kras_pmhc_stage05
+DRIVE_DIR_07 ?= $(GDRIVE)/kras_pmhc_stage07
 
 help:
 	@echo "Setup"
