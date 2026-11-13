@@ -12,8 +12,7 @@
 > **The whole project was co-executed with [Claude Code](https://claude.com/claude-code),
 > with Claude Code doing the actual coding.** I set the direction, made the
 > scientific decisions, chose and vetoed methods, audited structures in PyMOL,
-> etc. Claude Code wrote essentially all of the Python, the tests, and the prose
-> in the methods document.
+> etc. Claude Code wrote essentially all of the code, contributed to scientific decisions such as tool and filter selection, and wrote the prose in the methods document.
 >
 > I intend to keep working on this — reviewing the code, revisiting the approach,
 > and improving the stages one at a time. This README describes the repository as
